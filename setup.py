@@ -8,8 +8,9 @@ setup(
     long_description_content_type="text/markdown",
     author="Daniel Murnane",
     author_email="dtmurnane@lbl.gov",
+    license="MIT",
     url="https://github.com/OpenDataDetector/ColliderML",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests", "tests.*"]),
     python_requires=">=3.10,<3.12",
     install_requires=[
         "datasets>=2.14.0",
@@ -38,7 +39,6 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Topic :: Scientific/Engineering :: Physics",
