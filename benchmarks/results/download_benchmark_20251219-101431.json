@@ -1,0 +1,19 @@
+{
+  "dataset_id": "CERN/ColliderML-Release-1",
+  "out_dir": "/tmp/pytest-of-murnanedaniel/pytest-2/test_download_benchmark_writes0/out",
+  "results": [
+    {
+      "cached_seconds": 0.00019422500008658972,
+      "config": "ttbar_pu0_particles",
+      "filename": "data/ttbar_pu0_particles/train-00000-of-01000.parquet",
+      "initial_seconds": 0.0007461440000042785,
+      "local_path": "/tmp/pytest-of-murnanedaniel/pytest-2/test_download_benchmark_writes0/out/CERN__ColliderML-Release-1/ttbar_pu0_particles/data/ttbar_pu0_particles/train-00000-of-01000.parquet",
+      "size_bytes": 7,
+      "split": "train"
+    }
+  ],
+  "revision": null,
+  "shard_index": 0,
+  "split": "train",
+  "timestamp_unix": 1766139271
+}

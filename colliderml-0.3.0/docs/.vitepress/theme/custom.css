@@ -1,0 +1,21 @@
+/* Custom CSS Variables */
+:root {
+  --modal-border: var(--vp-c-divider);
+  --modal-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --vp-layout-max-width: 1440px;
+  --vp-content-width: 1200px;
+}
+
+/* Dark mode adjustments */
+.dark {
+  --modal-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* .VPContent.is-home {
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+
+.VPDoc.has-aside .content-container {
+  max-width: 100% !important;
+}  */

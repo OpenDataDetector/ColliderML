@@ -1,0 +1,8 @@
+include LICENSE
+include README.md
+include setup.cfg
+recursive-include tests *
+recursive-include docs *
+global-exclude *.py[cod]
+global-exclude __pycache__
+global-exclude *.so 

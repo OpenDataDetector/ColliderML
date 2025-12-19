@@ -1,0 +1,17 @@
+dataset_id: CERN/ColliderML-Release-1
+split: train
+configs:
+  - name: ttbar_pu0_particles
+    max_initial_seconds: 180
+    max_cached_seconds: 5
+  - name: ttbar_pu0_tracker_hits
+    max_initial_seconds: 180
+    max_cached_seconds: 5
+  - name: ttbar_pu0_calo_hits
+    max_initial_seconds: 240
+    max_cached_seconds: 5
+  - name: ttbar_pu0_tracks
+    max_initial_seconds: 120
+    max_cached_seconds: 5
+
+

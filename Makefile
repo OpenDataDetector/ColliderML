@@ -2,7 +2,7 @@
 
 # Run fast tests (excludes slow tests like full downloads)
 test-fast:
-	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -m "not slow"
+	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -m "not slow and not integration"
 
 # Run only slow tests
 test-slow:

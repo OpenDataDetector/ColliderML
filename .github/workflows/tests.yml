@@ -34,7 +34,11 @@ jobs:
     
     - name: Run tests
       run: |
-        PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v --cov=colliderml --cov-report=xml --cov-report=term-missing
+        PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -m "not slow and not integration" --cov=colliderml --cov-report=xml --cov-report=term-missing
+
+    - name: Download benchmark (warn-only)
+      run: |
+        python benchmarks/download_benchmark.py --warn-only
     
     - name: Generate Coverage Badge
       uses: tj-actions/coverage-badge-py@v2

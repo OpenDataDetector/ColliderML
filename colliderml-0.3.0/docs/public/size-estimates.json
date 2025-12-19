@@ -1,0 +1,14 @@
+{
+  "pu0": {
+    "particles": 0.25,
+    "tracker_hits": 0.2,
+    "calo_hits": 0.60,
+    "tracks": 0.003
+  },
+  "pu200": {
+    "particles": 8.0,
+    "tracker_hits": 10.0,
+    "calo_hits": 14.0,
+    "tracks": 0.07
+  }
+}
