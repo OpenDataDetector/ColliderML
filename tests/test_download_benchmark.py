@@ -51,7 +51,8 @@ def test_download_benchmark_writes_json_and_warns(tmp_path: Path, monkeypatch: p
         encoding="utf-8",
     )
 
-    monkeypatch.chdir("/home/murnanedaniel/Research/FoundationModels/ColliderML/colliderml")
+    repo_root = Path(__file__).resolve().parent.parent
+    monkeypatch.chdir(repo_root)
 
     # Act
     rc = main(
