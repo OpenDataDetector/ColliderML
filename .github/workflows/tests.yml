@@ -44,10 +44,11 @@ jobs:
       run: |
         python benchmarks/download_benchmark.py --warn-only
     
+    # coverage-badge 1.1.2 imports pkg_resources, removed in setuptools 82 (tj-actions/coverage-badge-py#180)
     - name: Generate Coverage Badge
-      uses: tj-actions/coverage-badge-py@v2
-      with:
-        output: coverage.svg
+      run: |
+        pip install "setuptools<82" coverage-badge
+        coverage-badge -f -o coverage.svg
     
     - name: Verify Changed files
       uses: tj-actions/verify-changed-files@v16
