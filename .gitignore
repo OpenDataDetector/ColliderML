@@ -1,3 +1,6 @@
+# Extracted sdist (e.g. from python -m build) — avoid pytest collecting from it
+colliderml-*/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -47,8 +50,8 @@ ENV/
 .DS_Store
 Thumbs.db 
 
-# Data files
-data/
+# Data files (top-level data dir only; do not ignore colliderml/core/data/)
+/data/
 *.csv
 # *.json
 *.txt

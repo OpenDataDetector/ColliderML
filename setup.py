@@ -9,7 +9,7 @@ setup(
     author="Daniel Murnane",
     author_email="dtmurnane@lbl.gov",
     url="https://github.com/OpenDataDetector/ColliderML",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests", "tests.*"]),
     python_requires=">=3.10,<3.12",
     install_requires=[
         "datasets>=2.14.0",
