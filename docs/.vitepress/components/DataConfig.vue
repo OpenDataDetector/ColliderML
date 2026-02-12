@@ -189,38 +189,23 @@ const estimatedSize = computed(() => {
   }
 })
 
-// Generate Python code
+// Generate CLI download command
 const command = computed(() => {
   const channel = selections.value.channels[0] || 'ttbar'
   const pileup = selections.value.pileup || 'pu0'
   const objects = selections.value.objects
   const events = selections.value.eventCount
 
-  const datasetId = 'CERN/Colliderml-release-1'
-
   if (objects.length === 0) {
-    return `# Select at least one object type`
+    return '# Select at least one object type'
   }
 
-  if (objects.length === 1) {
-    const configName = `${channel}_${pileup}_${objects[0]}`
-    return `from datasets import load_dataset
-dataset = load_dataset("${datasetId}", "${configName}", split="train[:${events}]")`
-  }
-
-  // Multiple objects
-  let code = `from datasets import load_dataset\n\n`
-  code += `# Load selected objects\n`
-  objects.forEach(obj => {
-    const configName = `${channel}_${pileup}_${obj}`
-    const varName = obj.replace('_', '')
-    code += `${varName} = load_dataset("${datasetId}", "${configName}", split="train[:${events}]")\n`
-  })
-
-  return code
+  const objectsStr = objects.join(',')
+  return `colliderml download --channels ${channel} --pileup ${pileup} --objects ${objectsStr} --max-events ${events}`
 })
 
 const libraryDocsLink = '/ColliderML/library/overview'
+const notebookLink = 'https://github.com/OpenDataDetector/ColliderML/blob/main/notebooks/colliderml_loader_exploration.ipynb'
 
 const toggleItem = (category, id) => {
   if (category === 'channels') {
@@ -441,6 +426,7 @@ const formatEventCount = (count) => {
 
     <!-- Command Display -->
     <div class="command-section">
+      <h4 class="command-label">Download command</h4>
       <div class="command">
         <pre><code>{{ command }}</code></pre>
         <button
@@ -459,7 +445,7 @@ const formatEventCount = (count) => {
         </button>
       </div>
       <div class="library-note">
-        Prefer a CLI + local loader workflow? See the <a :href="libraryDocsLink">ColliderML library docs</a>.
+        Then load the data in Python with <code>load_tables</code>; see the <a :href="libraryDocsLink">library docs</a> or the <a :href="notebookLink" target="_blank" rel="noopener">exploration notebook</a>.
       </div>
     </div>
   </div>
@@ -672,6 +658,12 @@ h4 {
   margin-top: 16px;
 }
 
+.command-label {
+  margin: 0 0 8px 0;
+  font-size: 1em;
+  color: var(--vp-c-text-2);
+}
+
 .command {
   display: flex;
   align-items: stretch;
@@ -706,6 +698,10 @@ h4 {
 
 .library-note a:hover {
   text-decoration: underline;
+}
+
+.library-note code {
+  font-size: 0.9em;
 }
 
 .copy-button {
