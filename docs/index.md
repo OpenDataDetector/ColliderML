@@ -12,26 +12,37 @@ The ColliderML dataset provides comprehensive simulation data for machine learni
 
 ## Get the Data
 
-The ColliderML dataset is hosted on [HuggingFace](https://huggingface.co/datasets/CERN/Colliderml-release-1) and can be accessed using the `datasets` library.
-
-::: tip Prefer a more convenient workflow?
-ColliderML also ships a Python library (`colliderml`) with a CLI download + local loading workflow and utilities (exploding tables, pileup subsampling, calibration, etc.). See [Library docs](/library/overview).
-:::
+Download data with the **colliderml** CLI, then load it in Python with Polars. The dataset is also on [HuggingFace](https://huggingface.co/datasets/CERN/Colliderml-release-1) if you prefer the `datasets` library.
 
 ### Quick Start
 
-1. Install the datasets library:
+1. Install and download:
+
 ```bash
-pip install datasets
+pip install colliderml
+colliderml download --channels ttbar --pileup pu0 --objects particles,tracker_hits,calo_hits,tracks --max-events 200
 ```
 
-2. Load a dataset:
+2. Load in Python (same config as the download):
+
 ```python
-from datasets import load_dataset
+from colliderml.core import load_tables, collect_tables
 
-# Load particles data from ttbar events (no pileup)
-dataset = load_dataset("CERN/Colliderml-release-1", "ttbar_pu0_particles")
+cfg = {
+    "dataset_id": "CERN/ColliderML-Release-1",
+    "channels": "ttbar",
+    "pileup": "pu0",
+    "objects": ["particles", "tracker_hits", "calo_hits", "tracks"],
+    "split": "train",
+    "lazy": False,
+    "max_events": 200,
+}
+tables = load_tables(cfg)
+frames = collect_tables(tables)  # dict[str, pl.DataFrame]
+# e.g. frames["particles"], frames["tracker_hits"]
 ```
+
+For more (exploding tables, pileup subsampling, calibration), see the [library docs](/library/overview) and the [exploration notebook](https://github.com/OpenDataDetector/ColliderML/blob/main/notebooks/colliderml_loader_exploration.ipynb).
 
 ### Interactive Configuration
 
