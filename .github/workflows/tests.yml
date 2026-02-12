@@ -34,7 +34,7 @@ jobs:
     
     - name: Run tests
       run: |
-        PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -m "not slow and not integration" --cov=colliderml --cov-report=xml --cov-report=term-missing
+        PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -p pytest_cov -m "not slow and not integration" --cov=colliderml --cov-report=xml --cov-report=term-missing
 
     - name: Download benchmark (warn-only)
       run: |
