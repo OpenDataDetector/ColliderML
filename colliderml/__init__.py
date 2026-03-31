@@ -2,9 +2,10 @@
 
 __version__ = "0.3.1"
 
+from . import clustering
 from . import core
 from . import physics
 from . import polars
 from . import utils
 
-__all__ = ["core", "physics", "polars", "utils"]
+__all__ = ["clustering", "core", "physics", "polars", "utils"]
