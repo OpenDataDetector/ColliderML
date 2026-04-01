@@ -19,6 +19,7 @@ setup(
         "h5py>=3.10.0",
         "polars>=0.20.0",
         "pyyaml>=6.0.0",
+        "scipy>=1.10.0",
     ],
     extras_require={
         "dev": [
