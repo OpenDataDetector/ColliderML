@@ -10,6 +10,13 @@ The ColliderML dataset provides comprehensive simulation data for machine learni
 
 </AboutData>
 
+## What you can do
+
+- **Load** pre-generated events: `colliderml.load("ttbar_pu0")` — downloads on first call, then caches.
+- **Simulate** new events yourself: [`colliderml.simulate(preset="ttbar-quick")`](/guide/simulation) — runs the full Pythia → Geant4 → ACTS pipeline locally, or submit to the SaaS backend with `remote=True`.
+- **Score** your models against benchmark tasks: [`colliderml.tasks.evaluate(...)`](/guide/tasks) — six built-in tasks covering tracking, jets, anomaly detection, and systems constraints.
+- **Explore** interactively: use the [event display](https://huggingface.co/spaces/ColliderML/event-display) or the [leaderboard](https://huggingface.co/spaces/ColliderML/leaderboard) HuggingFace Spaces.
+
 ## Get the Data
 
 Download data with the **colliderml** CLI, then load it in Python with Polars. The dataset is also on [HuggingFace](https://huggingface.co/datasets/CERN/Colliderml-release-1) if you prefer the `datasets` library.

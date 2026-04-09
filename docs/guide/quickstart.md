@@ -39,15 +39,66 @@ print(f"Loaded {len(dataset)} events")
 
 The HuggingFace `datasets` approach is great for quick access. For analysis workflows, ColliderML also provides a more convenient pattern:
 
-- download Parquet shards once via `colliderml download`
-- load locally with `colliderml.core.load_tables`
+- `colliderml.load("ttbar_pu0")` — one-liner that downloads on first call, then caches
 - explode event tables into flat tables with `colliderml.polars.explode_*`
+
+```python
+import colliderml
+from colliderml.polars import explode_particles
+
+# Downloads on first call, reads from the local cache afterwards.
+frames = colliderml.load("ttbar_pu0", tables=["particles"], max_events=200)
+particles_flat = explode_particles(frames["particles"])
+```
 
 See the [Library overview](/library/overview), then:
 
 - [CLI download](/library/cli)
 - [Local loading](/library/loading)
 - [Exploding tables](/library/exploding)
+
+## Generate events yourself
+
+New in v0.4.0. Instead of downloading pre-generated data, you can
+simulate your own events locally (inside the ODD software container
+via Docker or Podman) or submit a job to the SaaS backend:
+
+```python
+import colliderml
+
+# Local: needs `pip install "colliderml[sim]"` plus Docker or Podman.
+result = colliderml.simulate(preset="ttbar-quick")
+print(result.run_dir)                       # parquet outputs land here
+
+# Remote: needs `pip install "colliderml[remote]"` and an HF token.
+result = colliderml.simulate(preset="higgs-portal-quick", remote=True)
+print(result.remote_request_id)
+```
+
+Full details in the [Local Simulation](./simulation.md) and
+[Remote Simulation](./remote-simulation.md) guides.
+
+## Score your model against a benchmark task
+
+New in v0.4.0. Six built-in benchmark tasks (`tracking`, `jets`,
+`anomaly`, and three systems tasks) let you compare any model on
+equal footing:
+
+```python
+import colliderml.tasks
+
+# What's available?
+print(colliderml.tasks.list_tasks())
+
+# Score local predictions
+scores = colliderml.tasks.evaluate("tracking", "my_preds.parquet")
+print(scores)
+
+# Upload to the leaderboard (earns credits on new bests)
+colliderml.tasks.submit("tracking", "my_preds.parquet")
+```
+
+See the [Benchmark Tasks guide](./tasks.md) for the full workflow.
 
 ## Understanding Dataset Structure
 
