@@ -34,6 +34,10 @@ setup(
         "sim": [
             "pyyaml>=6.0.0",
         ],
+        # Remote simulation client — talks to the SaaS backend service.
+        "remote": [
+            "requests>=2.28.0",
+        ],
     },
     include_package_data=True,
     package_data={

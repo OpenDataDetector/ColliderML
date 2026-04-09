@@ -40,6 +40,9 @@ stays lean. Pick whichever you need:
 # Run simulation pipelines locally (requires Docker or Podman separately)
 pip install "colliderml[sim]"
 
+# Submit simulation jobs to the SaaS backend (no Docker needed)
+pip install "colliderml[remote]"
+
 # Development tools (testing, formatting, linting, type-checking)
 pip install "colliderml[dev]"
 ```
@@ -49,6 +52,13 @@ the container runtime — the actual container image and supporting data
 are fetched on first use of `colliderml.simulate()`. See
 [Local Simulation](./simulation.md) for the full story and disk-space
 expectations.
+
+The `remote` extra installs the `requests` library and gives you
+`colliderml.remote.submit`, `status`, `balance`, and the integrated
+`colliderml.simulate(remote=True)` path — see
+[Remote Simulation](./remote-simulation.md). You will also need a
+HuggingFace account and token, which is how the backend authenticates
+you.
 
 The `dev` extra includes:
 - `pytest` and `pytest-cov` for testing
