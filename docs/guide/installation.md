@@ -43,6 +43,9 @@ pip install "colliderml[sim]"
 # Submit simulation jobs to the SaaS backend (no Docker needed)
 pip install "colliderml[remote]"
 
+# Reference baselines for the benchmark task runner (brings scikit-learn)
+pip install "colliderml[tasks]"
+
 # Development tools (testing, formatting, linting, type-checking)
 pip install "colliderml[dev]"
 ```
@@ -59,6 +62,12 @@ The `remote` extra installs the `requests` library and gives you
 [Remote Simulation](./remote-simulation.md). You will also need a
 HuggingFace account and token, which is how the backend authenticates
 you.
+
+The `tasks` extra pulls in `scikit-learn` for the reference baselines
+shipped with each benchmark task (GBDT for jets, IsolationForest for
+anomaly detection). You only need it if you want to run the shipped
+baselines verbatim — the task *registry* and local scoring work with
+the base install. See [Benchmark Tasks](./tasks.md) for details.
 
 The `dev` extra includes:
 - `pytest` and `pytest-cov` for testing

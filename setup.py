@@ -38,6 +38,12 @@ setup(
         "remote": [
             "requests>=2.28.0",
         ],
+        # Benchmark task runner — includes scikit-learn for the reference
+        # baselines (BDT, IsolationForest). Task scoring itself only needs
+        # numpy + pyarrow which are already in install_requires.
+        "tasks": [
+            "scikit-learn>=1.3.0",
+        ],
     },
     include_package_data=True,
     package_data={
