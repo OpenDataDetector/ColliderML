@@ -31,15 +31,26 @@ cd colliderml
 pip install -e .
 ```
 
-### Development Installation
+### Optional feature sets (`extras`)
 
-To install with development dependencies (testing, formatting, etc.):
+ColliderML ships a handful of optional extras so that the base install
+stays lean. Pick whichever you need:
 
 ```bash
-pip install -e ".[dev]"
+# Run simulation pipelines locally (requires Docker or Podman separately)
+pip install "colliderml[sim]"
+
+# Development tools (testing, formatting, linting, type-checking)
+pip install "colliderml[dev]"
 ```
 
-This includes:
+The `sim` extra pulls in only the Python dependencies required to drive
+the container runtime — the actual container image and supporting data
+are fetched on first use of `colliderml.simulate()`. See
+[Local Simulation](./simulation.md) for the full story and disk-space
+expectations.
+
+The `dev` extra includes:
 - `pytest` and `pytest-cov` for testing
 - `black` for code formatting
 - `ruff` for linting

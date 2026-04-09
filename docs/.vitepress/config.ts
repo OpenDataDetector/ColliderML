@@ -1,22 +1,27 @@
 import { defineConfig } from 'vitepress'
 
+// Base path is branch-aware: `main` serves the canonical site at
+// `/ColliderML/`, `staging` (and PR previews) serve at `/ColliderML/staging/`.
+// The deploy workflow sets VITEPRESS_BASE accordingly; leave the default
+// for local `vitepress dev`.
+const base = process.env.VITEPRESS_BASE ?? '/ColliderML/'
+
 const config = defineConfig({
   title: 'ColliderML',
   description: 'A modern machine learning library for high-energy physics data analysis',
   lang: 'en-US',
   lastUpdated: true,
-  // Set base for GitHub Pages project site if repo is 'colliderml'.
-  // If using a custom domain or org/user site, adjust to '/'
-  base: '/ColliderML/',
-  
+  base,
+
   // Ignore dead links for now (pages don't exist yet)
   ignoreDeadLinks: true,
-  
+
   themeConfig: {
     // logo: { src: '/logo.png', height: 32 },
     siteTitle: 'ColliderML',
     nav: [
       { text: 'Home', link: '/' },
+      { text: 'Guide', link: '/guide/introduction' },
       { text: 'Library', link: '/library/overview' },
       { text: 'Appendices', link: '/appendices' }
     ],
@@ -26,11 +31,12 @@ const config = defineConfig({
           text: 'Library',
           items: [
             { text: 'Overview', link: '/library/overview' },
-            { text: 'CLI (download)', link: '/library/cli' },
+            { text: 'CLI', link: '/library/cli' },
             { text: 'Loading', link: '/library/loading' },
             { text: 'Exploding', link: '/library/exploding' },
             { text: 'Physics utilities', link: '/library/physics' },
-            { text: 'Benchmarks', link: '/library/benchmarks' },
+            { text: 'Simulate', link: '/library/simulate' },
+            { text: 'Benchmarks (timing)', link: '/library/benchmarks' },
           ],
         },
       ],
@@ -41,6 +47,7 @@ const config = defineConfig({
             { text: 'Introduction', link: '/guide/introduction' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Quickstart', link: '/guide/quickstart' },
+            { text: 'Local simulation', link: '/guide/simulation' },
           ],
         },
       ],

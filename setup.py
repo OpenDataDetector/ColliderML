@@ -29,6 +29,15 @@ setup(
             "mypy>=1.7.0",
             "matplotlib>=3.5.0",
         ],
+        # Local simulation via Docker/Podman — auto-clones the
+        # colliderml-production repo for pipeline scripts + configs.
+        "sim": [
+            "pyyaml>=6.0.0",
+        ],
+    },
+    include_package_data=True,
+    package_data={
+        "colliderml.simulate": ["presets.yaml"],
     },
     entry_points={
         "console_scripts": [
