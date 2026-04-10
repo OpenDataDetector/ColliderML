@@ -38,6 +38,13 @@ jobs:
           - model-zoo
 
     steps:
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.HF_TOKEN }}" ] || [ -z "${{ secrets.HF_USER }}" ]; then
+            echo "::error::HF_TOKEN and HF_USER repo secrets must be set. Go to Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
