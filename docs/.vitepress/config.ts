@@ -1,13 +1,17 @@
 import { defineConfig } from 'vitepress'
 
+// Base path is branch-aware: `main` serves the canonical site at
+// `/ColliderML/`, `staging` (and PR previews) serve at `/ColliderML/staging/`.
+// The deploy workflow sets VITEPRESS_BASE accordingly; leave the default
+// for local `vitepress dev`.
+const base = process.env.VITEPRESS_BASE ?? '/ColliderML/'
+
 const config = defineConfig({
   title: 'ColliderML',
   description: 'A modern machine learning library for high-energy physics data analysis',
   lang: 'en-US',
   lastUpdated: true,
-  // Set base for GitHub Pages project site if repo is 'colliderml'.
-  // If using a custom domain or org/user site, adjust to '/'
-  base: '/ColliderML/',
+  base,
   
   // Ignore dead links for now (pages don't exist yet)
   ignoreDeadLinks: true,
