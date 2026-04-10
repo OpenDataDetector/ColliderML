@@ -2,7 +2,7 @@ name: Deploy Docs
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, staging ]
   workflow_dispatch: {}
 
 jobs:
@@ -19,10 +19,23 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Compute base path
+        id: base
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "base=/ColliderML/" >> $GITHUB_OUTPUT
+            echo "dest=." >> $GITHUB_OUTPUT
+          else
+            echo "base=/ColliderML/staging/" >> $GITHUB_OUTPUT
+            echo "dest=staging" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install docs dependencies
         run: npm ci --prefix docs
 
       - name: Build docs
+        env:
+          VITEPRESS_BASE: ${{ steps.base.outputs.base }}
         run: npm run --prefix docs docs:build
 
       - name: Deploy to GitHub Pages
@@ -31,4 +44,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: docs/.vitepress/dist
           publish_branch: gh-pages
-
+          destination_dir: ${{ steps.base.outputs.dest }}
+          keep_files: true
