@@ -13,6 +13,7 @@ const config = defineConfig({
   lastUpdated: true,
   base,
 
+  
   // Ignore dead links for now (pages don't exist yet)
   ignoreDeadLinks: true,
 
