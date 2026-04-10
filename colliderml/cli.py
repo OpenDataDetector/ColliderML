@@ -1,15 +1,25 @@
 """ColliderML command-line interface.
 
-This CLI is intentionally limited to:
-- Downloading datasets/configs from HuggingFace to local disk
-- Listing locally cached configs (and optionally remote config discovery)
+Subcommands:
 
-All data loading/manipulation is done separately via the Polars loader.
+* ``download`` — download dataset configs from HuggingFace to local disk
+* ``list-configs`` — list locally cached configs (``--remote`` to query HF)
+* ``simulate`` — run the full simulation pipeline locally or remotely
+  (requires the ``[sim]`` or ``[remote]`` extras respectively)
+* ``list-presets`` — print the bundled simulation preset catalogue
+* ``balance`` — show the authenticated user's credit balance on the
+  SaaS backend (requires the ``[remote]`` extra)
+* ``status <request-id>`` — check a remote simulation request's state
+
+Each subcommand's handler lazily imports its subsystem so that
+``colliderml download`` does not pay the cost of importing Docker or
+``requests`` code when it only needs the HuggingFace loader.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 from typing import Iterable, Optional
@@ -102,6 +112,126 @@ def _cmd_list_configs(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# v0.4.0 subcommands — simulate / list-presets / balance / status
+#
+# Each handler uses a lazy import so that users who only run
+# `colliderml download` don't pay the cost of importing Docker or
+# requests-related code.
+# ---------------------------------------------------------------------------
+
+
+def _cmd_simulate(args: argparse.Namespace) -> int:
+    """Run the simulation pipeline locally or submit to the SaaS backend."""
+    from colliderml.simulate import simulate  # deferred: pulls pyyaml + docker helpers
+
+    if args.remote and args.local:
+        raise SystemExit("--local and --remote are mutually exclusive.")
+    use_remote = bool(args.remote)
+    try:
+        result = simulate(
+            preset=args.preset,
+            channel=args.channel,
+            events=args.events,
+            pileup=args.pileup,
+            seed=args.seed,
+            output_dir=args.output,
+            image=args.image,
+            remote=use_remote,
+            run_id=args.run_id,
+            quiet=args.quiet,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=__import__("sys").stderr)
+        return 2
+    if use_remote:
+        print(f"Remote request submitted: {result.remote_request_id}")
+        print(f"Poll with: colliderml status {result.remote_request_id}")
+    else:
+        print(f"Output: {result.run_dir}")
+    return 0
+
+
+def _cmd_list_presets(args: argparse.Namespace) -> int:
+    """Print the bundled simulation preset catalogue."""
+    from colliderml.simulate import load_presets  # deferred
+
+    presets = load_presets()
+    if not presets:
+        print("(no presets registered)")
+        return 0
+    name_width = max(len(name) for name in presets) + 2
+    channel_width = max(len(p.channel) for p in presets.values()) + 2
+    for name in sorted(presets):
+        p = presets[name]
+        line = (
+            f"{name:<{name_width}} "
+            f"channel={p.channel:<{channel_width}} "
+            f"events={p.events:<6} "
+            f"pileup={p.pileup:<4} "
+            f"{p.description}"
+        )
+        print(line.rstrip())
+    return 0
+
+
+def _cmd_balance(args: argparse.Namespace) -> int:
+    """Print the authenticated user's credit balance."""
+    try:
+        from colliderml.remote import balance, get_me  # deferred
+    except ImportError as exc:
+        print(
+            "The 'balance' subcommand requires the [remote] extra:\n"
+            "  pip install 'colliderml[remote]'",
+            file=__import__("sys").stderr,
+        )
+        raise SystemExit(1) from exc
+
+    try:
+        me = get_me(backend_url=args.backend_url)
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=__import__("sys").stderr)
+        return 1
+
+    credits = float(me.get("credits", 0.0) or 0.0)
+    username = me.get("hf_username", "(unknown)")
+    print(f"user:    {username}")
+    print(f"credits: {credits:.2f}")
+    if args.json:
+        print(json.dumps(me, indent=2, sort_keys=True))
+    return 0
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    """Fetch and print the status of a remote simulation request."""
+    try:
+        from colliderml.remote import status  # deferred
+    except ImportError as exc:
+        print(
+            "The 'status' subcommand requires the [remote] extra:\n"
+            "  pip install 'colliderml[remote]'",
+            file=__import__("sys").stderr,
+        )
+        raise SystemExit(1) from exc
+
+    try:
+        snap = status(args.request_id, backend_url=args.backend_url)
+    except Exception as exc:
+        print(f"error: {exc}", file=__import__("sys").stderr)
+        return 1
+
+    print(f"request_id:  {snap.request_id}")
+    print(f"state:       {snap.state}")
+    print(f"channel:     {snap.channel}")
+    print(f"events:      {snap.events}")
+    print(f"pileup:      {snap.pileup}")
+    if snap.output_hf_repo:
+        print(f"output:      {snap.output_hf_repo}")
+    if args.json:
+        print(json.dumps(snap.raw, indent=2, sort_keys=True, default=str))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser.
 
@@ -151,6 +281,74 @@ def build_parser() -> argparse.ArgumentParser:
         help="List configs by inspecting the remote dataset repo (requires network).",
     )
     p_ls.set_defaults(func=_cmd_list_configs)
+
+    # --- simulate ---------------------------------------------------------
+    p_sim = sub.add_parser(
+        "simulate",
+        help="Run the simulation pipeline locally (Docker/Podman) or remotely.",
+    )
+    p_sim.add_argument("--preset", default=None, help="Named preset (e.g. 'ttbar-quick').")
+    p_sim.add_argument(
+        "--channel", default=None, help="Physics channel (e.g. 'ttbar', 'higgs_portal')."
+    )
+    p_sim.add_argument("--events", type=int, default=None, help="Number of events to simulate.")
+    p_sim.add_argument("--pileup", type=int, default=None, help="Pileup level (0, 40, 200, …).")
+    p_sim.add_argument("--seed", type=int, default=42, help="Random seed (default: 42).")
+    p_sim.add_argument("--output", default=None, help="Host output directory.")
+    p_sim.add_argument(
+        "--image",
+        default=None,
+        help="Container image override. Defaults to the pinned ODD sw image.",
+    )
+    exec_mode = p_sim.add_mutually_exclusive_group()
+    exec_mode.add_argument(
+        "--local", action="store_true", help="Run locally (requires Docker or Podman)."
+    )
+    exec_mode.add_argument(
+        "--remote",
+        action="store_true",
+        help="Submit to the SaaS backend (requires an HF token).",
+    )
+    p_sim.add_argument(
+        "--run-id", default="0", help="Run subdirectory name (default: '0')."
+    )
+    p_sim.add_argument(
+        "--quiet", action="store_true", help="Suppress per-stage progress messages."
+    )
+    p_sim.set_defaults(func=_cmd_simulate)
+
+    # --- list-presets -----------------------------------------------------
+    p_lp = sub.add_parser("list-presets", help="Print the bundled simulation preset catalogue.")
+    p_lp.set_defaults(func=_cmd_list_presets)
+
+    # --- balance ----------------------------------------------------------
+    p_bal = sub.add_parser("balance", help="Show your SaaS backend credit balance.")
+    p_bal.add_argument(
+        "--backend-url",
+        default=None,
+        help="Override the backend URL (default: $COLLIDERML_BACKEND or https://api.colliderml.com).",
+    )
+    p_bal.add_argument(
+        "--json",
+        action="store_true",
+        help="Also print the full /v1/me response as JSON.",
+    )
+    p_bal.set_defaults(func=_cmd_balance)
+
+    # --- status -----------------------------------------------------------
+    p_stat = sub.add_parser("status", help="Check the state of a remote simulation request.")
+    p_stat.add_argument("request_id", help="Backend request ID to query.")
+    p_stat.add_argument(
+        "--backend-url",
+        default=None,
+        help="Override the backend URL.",
+    )
+    p_stat.add_argument(
+        "--json",
+        action="store_true",
+        help="Also print the full /v1/requests response as JSON.",
+    )
+    p_stat.set_defaults(func=_cmd_status)
 
     return parser
 

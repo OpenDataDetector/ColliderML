@@ -1,0 +1,114 @@
+name: Sync HuggingFace Spaces
+
+# Pushes each directory under `spaces/` to a corresponding HuggingFace Space.
+#
+# Triggered on pushes to `main` and `staging` that touch a space's files.
+# Each space lives under `spaces/<name>/` in this repo and is synced to:
+#   - main    -> ${{ secrets.HF_USER }}/colliderml-<name>
+#   - staging -> ${{ secrets.HF_USER }}/colliderml-<name>-staging
+#
+# Required repo secrets:
+#   HF_TOKEN - A HuggingFace token with WRITE access to the target user/org.
+#   HF_USER  - The HF username or org where the Spaces live (e.g. "dmurnane").
+#
+# Note: Space-level secrets (COLLIDERML_BACKEND, ANTHROPIC_API_KEY) are NOT
+# automatically set by this workflow. After the first sync, go to each Space's
+# Settings -> Variables and secrets and set them manually.
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - 'spaces/**'
+      - '.github/workflows/sync-spaces.yml'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        space:
+          - event-display
+          - simulation-form
+          - leaderboard
+          - model-zoo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install huggingface_hub
+        run: pip install --upgrade "huggingface_hub[cli]>=0.24"
+
+      - name: Verify Space directory exists
+        run: |
+          if [ ! -d "spaces/${{ matrix.space }}" ]; then
+            echo "::error::spaces/${{ matrix.space }} not found"
+            exit 1
+          fi
+          ls -la "spaces/${{ matrix.space }}"
+
+      - name: Create or update the Space repo
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USER: ${{ secrets.HF_USER }}
+          SPACE_NAME: ${{ matrix.space }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi, create_repo
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          space_name = os.environ["SPACE_NAME"]
+          hf_user = os.environ["HF_USER"]
+          branch = os.environ["BRANCH"]
+          sha = os.environ["SHA"]
+
+          # Staging pushes go to a -staging suffix so they don't clobber production.
+          suffix = "-staging" if branch == "staging" else ""
+          repo_id = f"{hf_user}/colliderml-{space_name}{suffix}"
+          print(f"Syncing spaces/{space_name}/ -> {repo_id}")
+
+          try:
+              create_repo(
+                  repo_id=repo_id,
+                  repo_type="space",
+                  space_sdk="gradio",
+                  token=os.environ["HF_TOKEN"],
+                  exist_ok=True,
+              )
+              print(f"Space {repo_id} ready")
+          except Exception as e:
+              print(f"create_repo warning (often safe to ignore): {e}")
+
+          api.upload_folder(
+              folder_path=f"spaces/{space_name}",
+              repo_id=repo_id,
+              repo_type="space",
+              commit_message=f"sync from {branch} @ {sha[:8]}",
+          )
+          print(f"Uploaded spaces/{space_name}/ to {repo_id}")
+          PY
+
+      - name: Summary
+        run: |
+          SUFFIX=""
+          if [ "${{ github.ref_name }}" = "staging" ]; then SUFFIX="-staging"; fi
+          echo "### Synced ${{ matrix.space }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "https://huggingface.co/spaces/${{ secrets.HF_USER }}/colliderml-${{ matrix.space }}${SUFFIX}" >> $GITHUB_STEP_SUMMARY

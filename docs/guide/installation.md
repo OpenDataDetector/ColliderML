@@ -31,15 +31,45 @@ cd colliderml
 pip install -e .
 ```
 
-### Development Installation
+### Optional feature sets (`extras`)
 
-To install with development dependencies (testing, formatting, etc.):
+ColliderML ships a handful of optional extras so that the base install
+stays lean. Pick whichever you need:
 
 ```bash
-pip install -e ".[dev]"
+# Run simulation pipelines locally (requires Docker or Podman separately)
+pip install "colliderml[sim]"
+
+# Submit simulation jobs to the SaaS backend (no Docker needed)
+pip install "colliderml[remote]"
+
+# Reference baselines for the benchmark task runner (brings scikit-learn)
+pip install "colliderml[tasks]"
+
+# Development tools (testing, formatting, linting, type-checking)
+pip install "colliderml[dev]"
 ```
 
-This includes:
+The `sim` extra pulls in only the Python dependencies required to drive
+the container runtime — the actual container image and supporting data
+are fetched on first use of `colliderml.simulate()`. See
+[Local Simulation](./simulation.md) for the full story and disk-space
+expectations.
+
+The `remote` extra installs the `requests` library and gives you
+`colliderml.remote.submit`, `status`, `balance`, and the integrated
+`colliderml.simulate(remote=True)` path — see
+[Remote Simulation](./remote-simulation.md). You will also need a
+HuggingFace account and token, which is how the backend authenticates
+you.
+
+The `tasks` extra pulls in `scikit-learn` for the reference baselines
+shipped with each benchmark task (GBDT for jets, IsolationForest for
+anomaly detection). You only need it if you want to run the shipped
+baselines verbatim — the task *registry* and local scoring work with
+the base install. See [Benchmark Tasks](./tasks.md) for details.
+
+The `dev` extra includes:
 - `pytest` and `pytest-cov` for testing
 - `black` for code formatting
 - `ruff` for linting
