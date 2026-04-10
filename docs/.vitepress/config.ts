@@ -69,6 +69,16 @@ const config = defineConfig({
         },
       ],
     },
+    search: {
+      provider: 'local',
+      options: {
+        _render(src: string, env: any) {
+          // Exclude /internal/ pages from search index
+          if (env.relativePath?.startsWith('internal/')) return ''
+          return src
+        }
+      }
+    },
     footer: {
       message: 'Released under the MIT License.',
       copyright: 'Copyright © 2024-present ColliderML Contributors'
