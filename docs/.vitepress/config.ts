@@ -23,6 +23,7 @@ const config = defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Library', link: '/library/overview' },
+      { text: 'Spaces', link: '/spaces/overview' },
       { text: 'Appendices', link: '/appendices' }
     ],
     sidebar: {
@@ -52,6 +53,18 @@ const config = defineConfig({
             { text: 'Local simulation', link: '/guide/simulation' },
             { text: 'Remote simulation', link: '/guide/remote-simulation' },
             { text: 'Benchmark tasks', link: '/guide/tasks' },
+          ],
+        },
+      ],
+      '/spaces/': [
+        {
+          text: 'HuggingFace Spaces',
+          items: [
+            { text: 'Overview', link: '/spaces/overview' },
+            { text: 'Event Display', link: '/spaces/event-display' },
+            { text: 'Simulation Form', link: '/spaces/simulation-form' },
+            { text: 'Leaderboard', link: '/spaces/leaderboard' },
+            { text: 'Model Zoo', link: '/spaces/model-zoo' },
           ],
         },
       ],
