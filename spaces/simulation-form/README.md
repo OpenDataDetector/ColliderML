@@ -9,6 +9,7 @@ python_version: "3.12"
 app_file: app.py
 pinned: true
 license: apache-2.0
+hf_oauth: true
 ---
 
 # ColliderML Simulation Service
