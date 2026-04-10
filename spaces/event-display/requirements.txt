@@ -1,0 +1,8 @@
+gradio>=4.44,<5.0
+huggingface_hub<1.0
+plotly>=5.20
+pyarrow>=14.0
+pandas>=2.0
+numpy>=1.24
+huggingface_hub>=0.20
+colliderml>=0.4.0

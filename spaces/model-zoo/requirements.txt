@@ -1,0 +1,4 @@
+gradio>=4.44,<5.0
+huggingface_hub<1.0
+huggingface_hub>=0.20
+pandas>=2.0
