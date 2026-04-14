@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="colliderml",
-    version="0.4.0rc1",
+    version="0.4.0rc2",
     description="A modern machine learning library for high-energy physics data analysis",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -10,7 +10,7 @@ setup(
     author_email="dtmurnane@lbl.gov",
     url="https://github.com/OpenDataDetector/ColliderML",
     packages=find_packages(exclude=["tests", "tests.*"]),
-    python_requires=">=3.10,<3.12",
+    python_requires=">=3.10",
     install_requires=[
         "datasets>=2.14.0",
         "huggingface_hub>=0.20.0",
@@ -65,6 +65,8 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Scientific/Engineering :: Physics",
     ],
     project_urls={

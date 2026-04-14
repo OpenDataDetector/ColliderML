@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.10 or 3.11
+- Python 3.10 or newer
 - pip or conda
 
 ## Install from PyPI
@@ -121,7 +121,7 @@ ColliderML datasets are public and don't require authentication. However, if you
 
 ### Python Version Issues
 
-ColliderML requires Python 3.10 or 3.11. Check your version:
+ColliderML requires Python 3.10 or newer. Check your version:
 
 ```bash
 python --version
