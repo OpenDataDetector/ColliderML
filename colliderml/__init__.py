@@ -31,7 +31,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-__version__ = "0.4.0"
+from importlib.metadata import PackageNotFoundError, version as _version
+
+try:
+    __version__ = _version("colliderml")
+except PackageNotFoundError:  # pragma: no cover — running from a source tree without metadata
+    __version__ = "0.0.0+unknown"
 
 # Subpackages that were in v0.3.1 and are always available.
 from . import core

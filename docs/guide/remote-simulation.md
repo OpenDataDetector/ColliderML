@@ -26,7 +26,7 @@ dataset and charges zero credits.
 
 ## Prerequisites
 
-1. **Python 3.10 or 3.11**.
+1. **Python 3.10 or newer**.
 2. **The remote extra**:
    ```bash
    pip install "colliderml[remote]"

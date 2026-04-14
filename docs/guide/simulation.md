@@ -25,7 +25,7 @@ A typical iteration loop — `simulate → inspect → tweak → simulate again`
 
 ## Prerequisites
 
-1. **Python 3.10 or 3.11** — see [Installation](./installation.md).
+1. **Python 3.10 or newer** — see [Installation](./installation.md).
 2. **Either Docker or Podman** on your `$PATH`. The library auto-detects
    whichever is installed; Docker is preferred if both are present.
 3. **Disk headroom**:
