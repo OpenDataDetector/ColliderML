@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.4.0] - 2026-04-09
+
+### Added
+- [library] Top-level `colliderml.load(dataset, *, tables, max_events, event_range, …)` — a one-liner that downloads missing parquets on demand, then loads them with the existing Polars backend. Uses the same `<channel>_<pileup>` shorthand as the benchmark task runner.
+- [library] `colliderml.simulate` subpackage — run the full Pythia / MadGraph / Geant4 / ACTS pipeline locally inside a Docker or Podman container, or submit to the SaaS backend with `remote=True`. Local simulate auto-clones the companion `colliderml-production` repo at a pinned git ref for pipeline scripts, mirroring the existing ODD and MG5aMC_PY8_interface cache pattern. Ships a bundled preset catalogue (`ttbar-quick`, `higgs-portal-quick`, `ttbar-dev`, `ttbar-benchmark`, …) accessible via `colliderml.simulate.load_presets()`.
+- [library] `colliderml.remote` subpackage — HTTP client for the ColliderML SaaS backend service. Exposes `submit`, `status`, `wait_for`, `get_me`, `balance`, and a `RemoteSubmission` dataclass. Authentication is via a HuggingFace token resolved from the environment or the hub's saved credentials.
+- [library] `colliderml.tasks` subpackage — registry and runner for six benchmark tasks: `tracking`, `jets`, `anomaly`, `tracking_latency`, `tracking_small`, `data_loading`. Each task defines a dataset, eval event range, input tables, metrics, and a `higher_is_better` direction. Reference baselines (CKF for tracking, scikit-learn GBDT for jets, IsolationForest for anomaly detection) run as `python -m colliderml.tasks.<task>.baselines.<name>`.
+- [library] CLI subcommands: `simulate`, `list-presets`, `balance`, `status`. Each handler lazily imports its subsystem so existing `download` / `list-configs` commands stay fast.
+- [library] Optional extras: `[sim]`, `[remote]`, `[tasks]`, and an `[all]` meta-extra that bundles everything plus `[dev]`. Base install stays lean.
+- [library] `pyarrow>=14.0.0` added to `install_requires` (used by the task scoring code at the polars/arrow boundary).
+- [docs] New guide pages: `guide/simulation`, `guide/remote-simulation`, `guide/tasks`. New library reference pages: `library/simulate`, `library/remote`, `library/tasks`. Navigation and sidebar extended to surface the new content.
+- [docs] Installation page documents the new optional extras with prerequisites.
+- [docs] Quickstart and library overview pages extended with simulate + tasks examples.
+- [infra] `docs/.vitepress/config.ts` reads `VITEPRESS_BASE` from the environment so the same config builds both the canonical `/ColliderML/` site and a `/ColliderML/staging/` preview (infrastructure landing in a sibling commit; see B7).
+
+### Changed
+- [library] Top-level `colliderml` package now uses a `__getattr__` lazy loader for the optional `simulate`, `remote`, and `tasks` subsystems so `import colliderml` stays cheap when extras aren't installed.
+
 ## [0.3.0] - 2025-12-19
 
 ### Added

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="colliderml",
-    version="0.3.1",
+    version="0.4.0rc1",
     description="A modern machine learning library for high-energy physics data analysis",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -19,6 +19,7 @@ setup(
         "h5py>=3.10.0",
         "polars>=0.20.0",
         "pyyaml>=6.0.0",
+        "pyarrow>=14.0.0",
     ],
     extras_require={
         "dev": [
@@ -29,6 +30,29 @@ setup(
             "mypy>=1.7.0",
             "matplotlib>=3.5.0",
         ],
+        # Local simulation via Docker/Podman — auto-clones the
+        # colliderml-production repo for pipeline scripts + configs.
+        "sim": [
+            "pyyaml>=6.0.0",
+        ],
+        # Remote simulation client — talks to the SaaS backend service.
+        "remote": [
+            "requests>=2.28.0",
+        ],
+        # Benchmark task runner — includes scikit-learn for the reference
+        # baselines (BDT, IsolationForest). Task scoring itself only needs
+        # numpy + pyarrow which are already in install_requires.
+        "tasks": [
+            "scikit-learn>=1.3.0",
+        ],
+        # Convenience meta-extra: everything above plus the dev tools.
+        "all": [
+            "colliderml[sim,remote,tasks,dev]",
+        ],
+    },
+    include_package_data=True,
+    package_data={
+        "colliderml.simulate": ["presets.yaml"],
     },
     entry_points={
         "console_scripts": [

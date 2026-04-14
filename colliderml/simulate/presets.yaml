@@ -1,0 +1,61 @@
+# ColliderML simulation presets.
+#
+# A preset is a named bundle of (channel, events, pileup) used by
+# ``colliderml simulate --preset <name>`` (CLI) and
+# ``colliderml.simulate(preset="<name>")`` (Python API).
+#
+# This file ships as package data. The canonical loader is
+# ``colliderml.simulate.load_presets``. When adding a new preset:
+#
+#   1. Pick a short kebab-case name (``<channel>-<purpose>``).
+#   2. Ensure ``channel`` matches one of the channels defined in
+#      ``colliderml/simulate/pipeline.py::CHANNEL_STAGES``.
+#   3. Keep ``description`` to one line so the CLI ``list-presets`` output
+#      stays readable.
+
+presets:
+  # --- Quick test presets (minutes on a workstation) -----------------------
+  ttbar-quick:
+    channel: ttbar
+    events: 10
+    pileup: 0
+    description: "ttbar, 10 events, no pileup (~15 min with full sim)"
+
+  higgs-portal-quick:
+    channel: higgs_portal
+    events: 10
+    pileup: 10
+    description: "Higgs portal (H→SS→bbbb), 10 events, low pileup (~15 min)"
+
+  # --- Development presets (hours) ----------------------------------------
+  ttbar-dev:
+    channel: ttbar
+    events: 100
+    pileup: 40
+    description: "ttbar, 100 events, moderate pileup (~2 hrs)"
+
+  higgs-portal-dev:
+    channel: higgs_portal
+    events: 100
+    pileup: 40
+    description: "Higgs portal, 100 events, moderate pileup (~2 hrs)"
+
+  # --- Benchmark presets (submit to NERSC via remote=True) ----------------
+  ttbar-benchmark:
+    channel: ttbar
+    events: 1000
+    pileup: 200
+    description: "ttbar, 1000 events, full pileup (benchmark-scale)"
+
+  higgs-portal-benchmark:
+    channel: higgs_portal
+    events: 1000
+    pileup: 200
+    description: "Higgs portal, 1000 events, full pileup (benchmark-scale)"
+
+  # --- Single-particle debugging ------------------------------------------
+  single-muon:
+    channel: single_muon
+    events: 100
+    pileup: 0
+    description: "Single muon gun, 100 events, no pileup (~5 min)"
