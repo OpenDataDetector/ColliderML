@@ -7,9 +7,43 @@ Sortable, filterable, with direct links to each model card.
 
 from __future__ import annotations
 
+import json
+import logging
+import os
+from pathlib import Path
+
 import gradio as gr
 import pandas as pd
-from huggingface_hub import list_models
+from huggingface_hub import HfApi, hf_hub_download, list_models
+
+logger = logging.getLogger(__name__)
+
+HF_RESULTS_DATASET = os.environ.get("COLLIDERML_RESULTS_DATASET", "CERN/colliderml-benchmark-results")
+
+
+def _load_best_scores() -> dict[str, dict]:
+    """Read the results dataset and return {username: {task: primary_score}}."""
+    try:
+        api = HfApi()
+        tree = api.list_repo_tree(HF_RESULTS_DATASET, repo_type="dataset", recursive=True)
+        json_files = [f for f in tree if f.rfilename.endswith(".json")]
+        best: dict[str, dict] = {}
+        for f in json_files:
+            path = hf_hub_download(HF_RESULTS_DATASET, f.rfilename, repo_type="dataset")
+            r = json.loads(Path(path).read_text())
+            model = r.get("model_repo_id") or ""
+            if not model:
+                continue
+            task = r.get("task", "?")
+            scores = r.get("scores", {})
+            primary = list(scores.values())[0] if scores else 0
+            key = model
+            if key not in best or primary > list(best[key].get("scores", {}).values())[0]:
+                best[key] = {"task": task, "scores": scores, "primary": primary}
+        return best
+    except Exception:
+        logger.debug("Could not load benchmark scores from HF dataset", exc_info=True)
+        return {}
 
 
 def fetch_models(task_filter: str = "any") -> pd.DataFrame:
@@ -18,18 +52,23 @@ def fetch_models(task_filter: str = "any") -> pd.DataFrame:
     except Exception as e:
         return pd.DataFrame({"error": [str(e)]})
 
+    scores_by_model = _load_best_scores()
+
     rows = []
     for m in models:
         tags = m.tags or []
         task = next((t for t in tags if t in ("tracking", "jets", "anomaly")), "general")
         if task_filter != "any" and task != task_filter:
             continue
+        bench = scores_by_model.get(m.modelId, {})
+        primary_score = bench.get("primary", "")
+        bench_task = bench.get("task", "")
         rows.append({
             "model": m.modelId,
             "task": task,
+            "benchmark": f"{bench_task}: {primary_score:.4f}" if primary_score != "" else "",
             "downloads": getattr(m, "downloads", 0) or 0,
             "likes": getattr(m, "likes", 0) or 0,
-            "pipeline": getattr(m, "pipeline_tag", "") or "",
             "url": f"https://huggingface.co/{m.modelId}",
         })
 

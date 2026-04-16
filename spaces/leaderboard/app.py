@@ -15,13 +15,16 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import List, Optional
 
 import gradio as gr
 import pandas as pd
 import requests
+from huggingface_hub import HfApi, hf_hub_download
 
 BACKEND = os.environ.get("COLLIDERML_BACKEND", "https://api.colliderml.com").rstrip("/")
+HF_RESULTS_DATASET = os.environ.get("COLLIDERML_RESULTS_DATASET", "CERN/colliderml-benchmark-results")
 
 
 def _discover_tasks() -> List[str]:
@@ -65,6 +68,55 @@ def _headers(token: str) -> dict:
 
 
 def fetch_leaderboard(task: str) -> pd.DataFrame:
+    """Load leaderboard from the HF results dataset, falling back to the backend API."""
+    df = _fetch_from_hf_dataset(task)
+    if df is not None and not df.empty:
+        return df
+    return _fetch_from_backend(task)
+
+
+def _fetch_from_hf_dataset(task: str) -> Optional[pd.DataFrame]:
+    """Read result JSONs from CERN/colliderml-benchmark-results."""
+    try:
+        api = HfApi()
+        tree = api.list_repo_tree(
+            HF_RESULTS_DATASET,
+            path_in_repo=f"results/{task}",
+            repo_type="dataset",
+            recursive=True,
+        )
+        json_files = [f for f in tree if f.rfilename.endswith(".json")]
+        if not json_files:
+            return None
+        results = []
+        for f in json_files:
+            path = hf_hub_download(HF_RESULTS_DATASET, f.rfilename, repo_type="dataset")
+            results.append(json.loads(Path(path).read_text()))
+        # Deduplicate: keep best primary-metric score per user.
+        best = {}
+        for r in results:
+            user = r.get("submitter", "?")
+            scores = r.get("scores", {})
+            primary = list(scores.values())[0] if scores else 0
+            if user not in best or primary > list(best[user].get("scores", {}).values())[0]:
+                best[user] = r
+        flat = []
+        for r in best.values():
+            scores = r.get("scores", {})
+            flat.append({
+                "submitter": r.get("submitter", "?"),
+                **scores,
+                "model": r.get("model_repo_id") or "",
+                "credits_earned": r.get("credits_earned", 0),
+                "submitted_at": r.get("submitted_at", ""),
+            })
+        return pd.DataFrame(flat)
+    except Exception:
+        return None
+
+
+def _fetch_from_backend(task: str) -> pd.DataFrame:
+    """Fallback: poll the backend API directly (legacy path)."""
     try:
         r = requests.get(f"{BACKEND}/v1/leaderboard/{task}?limit=100", timeout=20)
         r.raise_for_status()
@@ -73,7 +125,6 @@ def fetch_leaderboard(task: str) -> pd.DataFrame:
     rows = r.json()
     if not rows:
         return pd.DataFrame({"info": ["No submissions yet. Be the first!"]})
-
     flat = []
     for row in rows:
         scores = row.get("scores") or {}
