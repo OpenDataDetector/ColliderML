@@ -26,7 +26,7 @@ doubles as a conceptual map.
 | **Install** | `pip install --pre 'colliderml[all]'`  (pre-release until `0.4.0` final; drop `--pre` once it ships). |
 | **Disk headroom** | ~2 GB for the Chapter 1 dataset slice. |
 | **Chapter 2** | Docker or Podman on `$PATH`, plus ~12 GB for the pipeline container and Geant4 datasets (one-time download). |
-| **Chapters 3–4** | A running backend. Easiest: clone the `colliderml-production` repo and run `scripts/setup_tutorial_env.sh path/to/colliderml-production/backend`. |
+| **Chapters 3–4** | The ColliderML backend must be reachable. In production this is `api.colliderml.com` (the default). For local development, see the [operator note](#running-the-backend-yourself) at the bottom of this page. |
 | **Chapters 3–5** | A HuggingFace account and a token (`huggingface-cli login`). |
 
 If you're on a machine with a tight `$HOME` quota (e.g. NERSC
@@ -229,15 +229,27 @@ for the production setup.
 ## Chapter 4 — Benchmark a tracking algorithm
 
 The `tracking` task asks you to reconstruct particle tracks from
-detector hits in `ttbar_pu200` events. The dataset ships *candidate*
-tracker hits; your job is to group them into track assignments. A
-submission is a parquet file with three columns: `event_id`,
-`hit_id`, `track_id`.
+detector hits in `ttbar_pu200` events. Your algorithm receives
+**tracker hits only** — positions and measurement data — and must
+output a grouping of hits into tracks. A submission is a parquet
+file with three columns: `event_id`, `hit_id`, `track_id`.
 
-### The tracking efficiency definition
+Critically, the **truth** (which particle produced which hit) is
+**only available on the server** for the held-out eval split
+(events 90 000–99 999). You never see it. Your tracker must work
+without it.
+
+### Understanding the metric (training split, where you have truth)
+
+Before submitting anything, let's build intuition for how the
+scoring works. On the **training split** (events 0–89 999) truth
+*is* available, so we can run oracle baselines that cheat — they
+assign each hit to its true `particle_id`. These can't be submitted
+(the eval split doesn't ship truth to clients), but they're perfect
+for understanding the metric.
 
 The primary metric is **TrackML weighted efficiency**, scored by the
-double-majority rule on a held-out eval split (events 90 000–99 999):
+double-majority rule:
 
 > A reconstructed track is **correct** if
 > **one truth particle owns ≥50% of the track's hits**
@@ -246,37 +258,14 @@ double-majority rule on a held-out eval split (events 90 000–99 999):
 >
 > Efficiency = sum of hit weights in correct tracks ÷ total hit weight.
 
-Two companion metrics unpack the failure modes:
+Three companion metrics unpack the failure modes:
 
-- **Fake rate** — fraction of tracks failing the first half of the
-  rule (no single particle dominates). Usually means "this track is
-  made of hits from multiple particles."
+- **Fake rate** — fraction of tracks where no single particle
+  dominates (fails the first half of the rule).
 - **Duplicate rate** — fraction of truth particles matched to more
-  than one reconstructed track. Usually means "this particle got
-  split across fragments."
+  than one reconstructed track.
 - **Physics efficiency (pT > 1 GeV)** — fraction of high-pT primary
-  particles with *any* reconstructed track. A physics-centric
-  complement to the TrackML metric.
-
-All four are scored **server-side** on truth that's never shipped to
-clients. You can reproduce the local numbers with the helpers in
-`colliderml.tasks.tracking.metrics`, but the leaderboard number is
-authoritative.
-
-### A pedagogical submission
-
-The library ships two oracle baselines under
-`colliderml.tasks.tracking.baselines.oracle`:
-
-- `perfect_oracle_predictions(truth_hits)` — assigns each hit to its
-  truth particle. Scores ~1.0 on everything by construction. The
-  metric's upper bound.
-- `noised_oracle_predictions(truth_hits, *, split_fraction, merge_fraction, seed)` —
-  starts from the perfect oracle and deliberately degrades it.
-  `split_fraction` breaks tracks into two asymmetric pieces (attacks
-  the *"track owns majority of particle's hits"* half of the rule);
-  `merge_fraction` unifies track pairs within an event (attacks the
-  *"one particle owns majority of track's hits"* half).
+  particles with *any* reconstructed track.
 
 ```python
 import colliderml
@@ -286,8 +275,9 @@ from colliderml.tasks.tracking.baselines import (
 )
 from colliderml.tasks.tracking.metrics import trackml_weighted_efficiency
 
+# Use training events (0–999) where truth is available locally.
 tracking = colliderml.tasks.get("tracking")
-truth = tracking.load(tables=["tracker_hits"], event_range=(90_000, 90_050))["tracker_hits"]
+truth = tracking.load(tables=["tracker_hits"], event_range=(0, 50))["tracker_hits"]
 
 perfect = perfect_oracle_predictions(truth)
 noised = noised_oracle_predictions(truth, split_fraction=0.1, merge_fraction=0.1, seed=42)
@@ -296,42 +286,98 @@ print("perfect oracle eff:", trackml_weighted_efficiency(perfect, truth))
 print("noised oracle eff: ", trackml_weighted_efficiency(noised, truth))
 ```
 
-Submit for real scoring on the leaderboard:
+The oracle baselines teach two things:
+
+- `split_fraction` breaks tracks into asymmetric pieces. The small
+  fragment's particle contribution falls below 50%, scoring as a
+  fake. Efficiency drops roughly linearly.
+- `merge_fraction` unifies two tracks into one. Neither particle
+  owns a majority of the merged track, so **both** contributions
+  are lost. Harsher — roughly quadratic near zero.
+
+### Building a real (naive) tracker
+
+A real submission operates on tracker hits **without truth**. The
+simplest approach: cluster the hits spatially. Hits from the same
+particle tend to lie along a helical trajectory, so even a crude
+spatial clustering catches some of that structure.
 
 ```python
-result = colliderml.tasks.submit("tracking", noised)
+import numpy as np
+import pyarrow as pa
+from sklearn.cluster import DBSCAN
+
+# Load eval-range tracker_hits (no truth here — only positions).
+eval_hits = tracking.load(
+    tables=["tracker_hits"],
+    event_range=(90_000, 90_050),
+)["tracker_hits"]
+
+cols = eval_hits.to_pydict()
+x = np.array(cols["tx"])       # global x position
+y = np.array(cols["ty"])       # global y position
+z = np.array(cols["tz"])       # global z position
+
+# Cylindrical coords — better for helical tracks.
+r = np.sqrt(x**2 + y**2)
+phi = np.arctan2(y, x)
+eta = np.arctanh(z / np.sqrt(x**2 + y**2 + z**2 + 1e-9))
+
+# Cluster per-event (DBSCAN doesn't know about event boundaries,
+# so we loop). This is deliberately naive — a real tracker would
+# use a GNN or Kalman filter.
+events = np.array(cols["event_id"])
+track_ids = np.full(len(events), -1)
+
+for eid in np.unique(events):
+    mask = events == eid
+    features = np.column_stack([phi[mask], eta[mask], r[mask] / r.max()])
+    labels = DBSCAN(eps=0.15, min_samples=3).fit_predict(features)
+    # Shift labels to avoid collisions across events.
+    labels[labels >= 0] += track_ids.max() + 1
+    track_ids[mask] = labels
+
+preds = pa.table({
+    "event_id": pa.array(cols["event_id"]),
+    "hit_id":   pa.array(cols["hit_id"]),
+    "track_id": pa.array(track_ids.tolist()),
+})
+print(f"DBSCAN found {len(set(track_ids)) - 1} track candidates")
+```
+
+::: warning Column names may vary
+The exact position-column names (`tx`, `ty`, `tz`) depend on the
+dataset release. Inspect `eval_hits.column_names` and adapt. The
+tracking task definition (`tracking.inputs`) lists which tables are
+available.
+:::
+
+### Submit to the leaderboard
+
+```python
+result = colliderml.tasks.submit("tracking", preds)
 print("server scores: ", result["scores"])
 print("credits earned:", result["credits_earned"])
 ```
 
 ### What just happened
 
-The backend's `POST /v1/benchmark/tracking/submit` took the parquet
-bytes, loaded them with pyarrow, and ran the same
+The backend's `POST /v1/benchmark/tracking/submit` took your
+parquet bytes, loaded them with pyarrow, and ran
 `trackml_weighted_efficiency` / `fake_rate` / `duplicate_rate` /
-`physics_eff_pt1` code you just ran locally — but on the **full
-10 000-event eval split** backed by a truth table that never leaves
-the server. If the result beats the current best on any metric with
-`higher_is_better=True`, credits are written to the user's ledger.
-The leaderboard Space (`spaces/leaderboard/`) polls
-`/v1/leaderboard/tracking` to render the public table.
+`physics_eff_pt1` against the **server-held truth** for events
+90 000–99 999 — data you never saw. If your result beats the
+current leaderboard best on any metric with `higher_is_better=True`,
+credits are written to your ledger. The leaderboard Space
+(`spaces/leaderboard/`) polls `/v1/leaderboard/tracking` to render
+the public table.
 
-**Why an oracle baseline is a useful submission.** It's not a
-tracking algorithm — it's a calibration point. Perfect oracle scores
-≈1 by construction, so it tells you the metric's true ceiling.
-Noised oracle with small fractions shows how quickly the TrackML
-score punishes each failure mode:
-
-- `split_fraction`: each split turns one correct track into (one
-  correct + one fake). The efficiency drop is roughly linear in
-  `split_fraction` because the remaining ~70% of the original track
-  still passes the double-majority rule.
-- `merge_fraction`: harsher — a single merge sacrifices **both**
-  contributing tracks, so the drop is roughly quadratic near
-  zero.
-
-When you write a real tracker (DBSCAN on (η, φ, r), a GNN, a CKF),
-this is the yardstick.
+The DBSCAN baseline above is deliberately terrible — it ignores
+curvature, momentum, and layer ordering. A real tracker (Kalman
+filter, GNN, transformer) would improve dramatically. But the
+submission flow is identical: produce `(event_id, hit_id, track_id)`
+rows, call `colliderml.tasks.submit("tracking", preds)`, and let
+the backend score it.
 
 ---
 
@@ -459,3 +505,38 @@ upload_folder(folder_path="...", repo_id=f"{user}/my-tracker")
 
 Issues, questions, ideas:
 [github.com/OpenDataDetector/ColliderML/issues](https://github.com/OpenDataDetector/ColliderML/issues).
+
+---
+
+## Running the backend yourself {#running-the-backend-yourself}
+
+::: details For operators and contributors — not needed for most users
+
+In production the backend runs at `api.colliderml.com` and the
+library talks to it by default. If you're developing backend
+features, running integration tests, or want to demo the full
+stack locally, you can spin it up from the companion
+[`colliderml-production`](https://github.com/OpenDataDetector/colliderml-production)
+repo:
+
+```bash
+git clone git@github.com:OpenDataDetector/colliderml-production.git
+cd colliderml-production/backend
+docker-compose up -d          # or podman-compose up -d
+export COLLIDERML_BACKEND=http://localhost:8000
+```
+
+Then use the provided setup helper to grant yourself tutorial
+credits:
+
+```bash
+# from the public colliderml repo:
+bash scripts/setup_tutorial_env.sh ../colliderml-production/backend your-hf-username
+```
+
+By default the backend runs in **mock SFAPI mode** — simulation
+requests complete in ~2 seconds with no real pipeline execution.
+Set `SFAPI_CLIENT_ID` and `SFAPI_CLIENT_SECRET` to switch to
+real Perlmutter job submission. See the
+[operator docs](../internal/sfapi.md) for details.
+:::
