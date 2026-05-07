@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import List, Tuple
 
 import polars as pl
+import pyarrow as pa
 
 from colliderml.core.tables import PolarsTable
 
@@ -64,6 +65,45 @@ def explode_tracker_hits(tracker_hits: PolarsTable, *, index_name: str = "hit_in
     else:
         list_cols = [c for c, dt in tracker_hits.schema.items() if c != "event_id" and isinstance(dt, pl.List)]
     return _to_pandas(explode_event_table(tracker_hits, list_cols=list_cols, index_name=index_name))
+
+
+def explode_event_table_pyarrow(
+    table: pa.Table,
+    *,
+    index_name: str = "hit_id",
+) -> pa.Table:
+    """Explode a list-per-event :class:`pyarrow.Table` into row-per-object.
+
+    The benchmark task path is pyarrow-end-to-end (predictions are
+    pyarrow, metrics are pyarrow), so we want a pyarrow→pyarrow primitive
+    that doesn't detour through pandas. Internally we still go through
+    Polars because its ``explode`` is the cleanest implementation we
+    have, but the public surface stays in pyarrow.
+
+    Every column except ``event_id`` is expected to be a list column;
+    list lengths must match within each row. The output adds a single
+    new scalar column ``index_name`` holding the per-event row index.
+
+    Args:
+        table: Event table with ``event_id`` and one list column per
+            field (this is the shape :func:`colliderml.load` returns).
+        index_name: Name of the new per-event row-index column. Use
+            ``"hit_id"`` for tracker hits (matches the predictions /
+            metrics contract); ``"particle_index"`` for particles, etc.
+
+    Returns:
+        A flat pyarrow Table — one row per object, with every former
+        list column flattened to a scalar column plus ``index_name``.
+    """
+    if "event_id" not in table.column_names:
+        raise KeyError(
+            f"explode_event_table_pyarrow expects an 'event_id' column; got {table.column_names}"
+        )
+    pl_table = pl.from_arrow(table)
+    list_cols = [c for c in pl_table.columns if c != "event_id"]
+    return explode_event_table(
+        pl_table, list_cols=list_cols, index_name=index_name
+    ).to_arrow()
 
 
 def explode_calo_cells_and_contribs(

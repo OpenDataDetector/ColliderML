@@ -11,6 +11,7 @@ from typing import Dict, List, Tuple
 
 import pyarrow as pa
 
+from colliderml.polars import explode_event_table_pyarrow
 from colliderml.tasks import register
 from colliderml.tasks._base import BenchmarkTask
 from colliderml.tasks.tracking.metrics import trackml_weighted_efficiency
@@ -39,7 +40,11 @@ class TrackingSmallModelTask(BenchmarkTask):
     higher_is_better = {"trackml_eff": True, "n_params": False, "tier": False}
 
     def load_eval_inputs(self) -> Dict[str, pa.Table]:
-        return self.load(tables=["tracker_hits"], event_range=self.eval_event_range)
+        return {"tracker_hits": self._load_flat_hits()}
+
+    def _load_flat_hits(self) -> pa.Table:
+        raw = self.load(tables=["tracker_hits"], event_range=self.eval_event_range)
+        return explode_event_table_pyarrow(raw["tracker_hits"], index_name="hit_id")
 
     def validate_predictions(self, preds: pa.Table) -> None:
         required = {"event_id", "hit_id", "track_id", "n_params"}
@@ -51,8 +56,7 @@ class TrackingSmallModelTask(BenchmarkTask):
             )
 
     def score(self, preds: pa.Table) -> Dict[str, float]:
-        truth = self.load(tables=["tracker_hits"], event_range=self.eval_event_range)
-        eff = trackml_weighted_efficiency(preds, truth["tracker_hits"])
+        eff = trackml_weighted_efficiency(preds, self._load_flat_hits())
         n_params = int(preds.column("n_params").to_pylist()[0])
         return {
             "trackml_eff": eff,

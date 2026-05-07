@@ -6,6 +6,7 @@ from typing import Dict, Tuple
 
 import pyarrow as pa
 
+from colliderml.polars import explode_event_table_pyarrow
 from colliderml.tasks import register
 from colliderml.tasks._base import BenchmarkTask
 from colliderml.tasks.tracking.metrics import (
@@ -33,13 +34,45 @@ class TrackingTask(BenchmarkTask):
     }
 
     def load_eval_inputs(self) -> Dict[str, pa.Table]:
-        return self.load(tables=["tracker_hits"], event_range=self.eval_event_range)
+        return {"tracker_hits": self.load_truth_hits()}
+
+    def load_truth_hits(self, *, event_range: Tuple[int, int] | None = None) -> pa.Table:
+        """Return tracker hits as a flat row-per-hit pyarrow Table.
+
+        The dataset on disk stores hits as list-per-event (one row per
+        event with parallel list columns). Predictions, metrics, and
+        baselines all consume the **flat** shape — one row per hit, with
+        an explicit ``hit_id`` column equal to the per-event row index.
+        This helper performs that explosion and is the canonical way for
+        users to load the eval truth.
+
+        Args:
+            event_range: Override the eval range. Defaults to
+                :attr:`eval_event_range`. Use a small subrange for demos.
+
+        Returns:
+            A flat pyarrow Table with columns
+            ``event_id, hit_id, particle_id, x, y, z, …``.
+        """
+        er = event_range or self.eval_event_range
+        raw = self.load(tables=["tracker_hits"], event_range=er)["tracker_hits"]
+        return explode_event_table_pyarrow(raw, index_name="hit_id")
 
     def _load_truth(self) -> Tuple[pa.Table, pa.Table]:
-        """Load truth hits and particles for the eval split."""
-        hits = self.load(tables=["tracker_hits"], event_range=self.eval_event_range)
-        particles = self.load(tables=["particles"], event_range=self.eval_event_range)
-        return hits["tracker_hits"], particles["particles"]
+        """Load flat truth hits and flat truth particles for the eval split.
+
+        Both are exploded from list-per-event into row-per-object so the
+        metrics can iterate over scalar columns directly (they assume
+        ``px``/``py``/``primary`` are parallel 1-D arrays).
+        """
+        hits = self.load_truth_hits()
+        particles_raw = self.load(
+            tables=["particles"], event_range=self.eval_event_range
+        )["particles"]
+        particles = explode_event_table_pyarrow(
+            particles_raw, index_name="particle_index"
+        )
+        return hits, particles
 
     def validate_predictions(self, preds: pa.Table) -> None:
         required = {"event_id", "hit_id", "track_id"}
