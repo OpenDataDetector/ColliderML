@@ -16,8 +16,18 @@ def stub_loader(monkeypatch: pytest.MonkeyPatch):
     """Replace the core loader and cache-ensurance so tests are pure-Python."""
     calls: Dict[str, object] = {}
 
-    def fake_ensure(channel: str, pileup: str, tables: List[str], *, dataset_id: str, revision=None) -> None:
+    def fake_ensure(
+        channel: str,
+        pileup: str,
+        tables: List[str],
+        *,
+        dataset_id: str,
+        revision=None,
+        max_events=None,
+        event_range=None,
+    ) -> None:
         calls["ensure"] = (channel, pileup, list(tables), dataset_id, revision)
+        calls["ensure_bounds"] = (max_events, event_range)
 
     stub_frame = pl.DataFrame(
         {

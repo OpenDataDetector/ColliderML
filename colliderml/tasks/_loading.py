@@ -22,7 +22,6 @@ from colliderml.core.hf_download import (
     DEFAULT_DATASET_ID,
     DownloadSpec,
     download_config,
-    list_local_configs,
 )
 from colliderml.core.loader import load_tables
 from colliderml.core.tables import select_events
@@ -61,18 +60,27 @@ def _ensure_downloaded(
     tables: List[str],
     *,
     dataset_id: str,
+    max_events: Optional[int] = None,
+    event_range: Optional[Tuple[int, int]] = None,
 ) -> None:
-    """Populate the local cache with every per-object config this task needs.
+    """Populate the local cache with the shards this task needs.
 
-    The loader can only read configs that are already on disk, so this
-    pre-flight step calls :func:`download_config` for any missing piece.
+    Forwards ``max_events`` and ``event_range`` to :class:`DownloadSpec`
+    so the download layer only pulls the relevant shards. Without this,
+    a ``task.load(event_range=(90_000, 90_050))`` call against the
+    high-pileup tracker dataset would silently snapshot the full ~700 GB
+    config.
     """
-    local = set(list_local_configs(None, dataset_id))
     for obj in tables:
         cfg_name = f"{channel}_{pileup}_{obj}"
-        if cfg_name in local:
-            continue
-        download_config(DownloadSpec(dataset_id=dataset_id, config=cfg_name))
+        download_config(
+            DownloadSpec(
+                dataset_id=dataset_id,
+                config=cfg_name,
+                max_events=max_events,
+                event_range=event_range,
+            )
+        )
 
 
 def _expand_event_range(event_range: Tuple[int, int]) -> List[int]:
@@ -124,7 +132,14 @@ def load_task_data(
     channel, pileup = parse_dataset_name(dataset)
     repo = dataset_id or DEFAULT_DATASET_ID
 
-    _ensure_downloaded(channel, pileup, tables, dataset_id=repo)
+    _ensure_downloaded(
+        channel,
+        pileup,
+        tables,
+        dataset_id=repo,
+        max_events=max_events,
+        event_range=event_range,
+    )
 
     config = LoaderConfig(
         dataset_id=repo,
