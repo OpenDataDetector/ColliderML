@@ -53,14 +53,22 @@ if [[ -z "${BACKEND_DIR}" || ! -d "${BACKEND_DIR}" ]]; then
 fi
 
 if [[ -z "${HF_USER}" ]]; then
-    if command -v huggingface-cli >/dev/null 2>&1; then
+    # huggingface_hub 1.14+ replaced `huggingface-cli` with `hf`; the
+    # old binary still exists but only prints a deprecation notice and
+    # exits non-zero. Prefer the new CLI; fall back to the old one for
+    # venvs that haven't been upgraded yet.
+    if command -v hf >/dev/null 2>&1; then
+        # `hf auth whoami` prints e.g. "user=murnanedaniel orgs=CERN,..."
+        HF_USER=$(hf auth whoami 2>/dev/null | head -n1 | sed -n 's/^user=\([^ ]*\).*/\1/p' || true)
+    fi
+    if [[ -z "${HF_USER}" ]] && command -v huggingface-cli >/dev/null 2>&1; then
         HF_USER=$(huggingface-cli whoami 2>/dev/null | head -n1 || true)
     fi
 fi
 if [[ -z "${HF_USER}" ]]; then
     echo "error: no HuggingFace username supplied." >&2
     echo "       pass it as the second argument, set \$HF_USERNAME," >&2
-    echo "       or run 'huggingface-cli login' first." >&2
+    echo "       or run 'hf auth login' first." >&2
     exit 2
 fi
 
