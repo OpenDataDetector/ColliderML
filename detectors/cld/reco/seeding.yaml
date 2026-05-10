@@ -1,0 +1,25 @@
+# ACTS seed-finder config for CLD.
+# Tuned for FCC-ee Z-pole running: very small luminous region, soft track
+# spectrum, no pileup. Looser pT cut than ODD (CLD wants efficient soft-track
+# reco for flavour tagging).
+
+seed_finder:
+  rMax_mm:           120.0       # CLD outer tracker r ~ 1.5 m, but seeds use the inner stack
+  deltaRMin_mm:        2.0
+  deltaRMax_mm:       60.0
+  collisionRegion_mm:  30.0      # small FCC-ee luminous region in z
+  zMax_mm:            1500.0
+  zMin_mm:           -1500.0
+  maxSeedsPerSpM:      4
+  cotThetaMax:         7.40627   # eta = 3.0
+  sigmaScattering:     5.0
+  radLengthPerSeed:    0.05      # CLD vertex is thinner than ODD pixels
+  minPt_MeV:         100.0       # soft enough for K_S, low-pT b-tagging
+  bFieldInZ_T:         2.0
+  beamPos_mm:        [0.0, 0.0]
+  impactMax_mm:        2.0       # tighter; small luminous region
+
+space_points:
+  pixel_volumes:        []        # placeholders — fill from CLD_o2_v05.xml after setup.sh
+  short_strip_volumes:  []
+  long_strip_volumes:   []

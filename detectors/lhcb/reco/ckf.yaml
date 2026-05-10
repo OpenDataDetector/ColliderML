@@ -1,0 +1,13 @@
+# SKETCH CKF config for LHCb. Inherited ODD defaults pending forward
+# tracking implementation.
+
+ckf:
+  chi2_cut_outlier:    20.0
+  chi2_cut_measurement: 9.0
+  num_measurements_cut_off: 12
+  branches_per_seed:    7
+
+ambiguity_solver:
+  maximum_shared_hits:  3
+  maximum_iterations:   1000000
+  n_measurements_min:   8        # VELO 4 + UT 4 (ignoring SciFi for the cut)

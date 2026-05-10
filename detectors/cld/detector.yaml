@@ -1,0 +1,60 @@
+name: CLD
+version: "2024-08-15"
+status: draft
+
+provenance:
+  upstream: https://github.com/key4hep/k4geo
+  upstream_path: FCCee/CLD/compact/CLD_o2_v05/CLD_o2_v05.xml
+  # Pinned to a known-good k4geo release at the time of writing. Bumping this
+  # is fine but requires re-running the bundle smoke test.
+  upstream_revision: v00-19-01
+  license: GPL-3.0-or-later
+
+geometry:
+  compact_xml: geometry/CLD_o2_v05.xml
+  plugins:
+    - libk4geo.so
+
+acts:
+  tracking_builder: dd4hep_auto
+  tracking_config:  acts/tracking.yaml
+  digi_config:      acts/digi.json
+  # CLD ships no canonical ACTS material map upstream. We start without one
+  # and fall back to ACTS' default material assigner. This is the dominant
+  # source of "draft" status — momentum resolution from this bundle should
+  # not be quoted as CLD's design value until a material map is generated.
+  material_map:     null
+  seeding_config:   reco/seeding.yaml
+  ckf_config:       reco/ckf.yaml
+
+field:
+  type: uniform_solenoid
+  Bz_T: 2.0
+
+machine:
+  collider: FCC-ee
+  beam: e+e-
+  cms_energy_GeV: [91.2, 160.0, 240.0, 365.0]
+  default_vertex_distribution:
+    # FCC-ee Z-pole optics (CDR vol 2). Other run modes have different sizes;
+    # if/when we run those, this becomes a per-energy table.
+    sigma_x_um: 6.4
+    sigma_y_um: 0.028
+    sigma_z_mm: 12.1
+  default_pileup_mu: 0          # FCC-ee single-bunch pileup ~ negligible
+  acceptance:
+    eta_min: -3.0
+    eta_max:  3.0
+    topology: barrel_endcap
+
+output_mapping: output/schema_mapping.yaml
+
+notes: |
+  Draft bundle. Three things stand between this and "reference":
+    1. ACTS material map (none upstream; needs to be produced from the ddsim
+       material scan).
+    2. ACTS tracking-extension coverage on every CLD volume (k4geo coverage
+       is partial; some sub-detectors may need a thin extension plugin).
+    3. Digitization config tuning — current values are reasonable defaults
+       from the CLD note (arXiv:1911.12230) rather than measured numbers.
+  Do not quote physics performance from this bundle as CLD's design value.

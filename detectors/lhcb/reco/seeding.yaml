@@ -1,0 +1,26 @@
+# SKETCH. ACTS seeding for LHCb is not the standard ATLAS-like triplet
+# approach — LHCb's own pattern recognition uses VELO triplets matched to
+# downstream T-stations through the magnet. If/when ACTS forward tracking
+# lands, these parameters will be revisited; for now they're placeholders so
+# the manifest validates.
+
+seed_finder:
+  rMax_mm:           400.0
+  deltaRMin_mm:        5.0
+  deltaRMax_mm:      300.0
+  collisionRegion_mm: 200.0
+  zMax_mm:           1000.0
+  zMin_mm:          -1000.0
+  maxSeedsPerSpM:      5
+  cotThetaMax:         100.0     # forward acceptance, eta up to ~5
+  sigmaScattering:     5.0
+  radLengthPerSeed:    0.05
+  minPt_MeV:         200.0
+  bFieldInZ_T:         0.0       # LHCb dipole, not a solenoid; placeholder
+  beamPos_mm:        [0.0, 0.0]
+  impactMax_mm:        5.0
+
+space_points:
+  velo_volumes:    []
+  ut_volumes:      []
+  scifi_volumes:   []

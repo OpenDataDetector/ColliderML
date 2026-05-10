@@ -1,0 +1,43 @@
+{
+  "_comment": "SKETCH digitization for LHCb Run 3+. Numbers from upgrade TDRs (LHCB-TDR-013, LHCB-TDR-014, LHCB-TDR-015). Format mirrors ACTS geometric digi config; will only be consumed once the custom forward tracking builder exists.",
+  "entries": [
+    {
+      "volume": "VELO",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.012 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 0.012 }
+      ],
+      "_design": "VeloPix, 55x55 um pitch, ~12 um single-hit resolution"
+    },
+    {
+      "volume": "UT",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.050 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 5.0   }
+      ],
+      "_design": "190 um strip pitch, length-dependent in r"
+    },
+    {
+      "volume": "SciFi",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.080 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 5.0   }
+      ],
+      "_design": "250 um fibre, cluster centroid ~80 um in bending plane"
+    },
+    {
+      "volume": "ECAL",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.0 }
+      ],
+      "_design": "Shashlik, 4x4 / 6x6 / 12x12 cm cells (region-dependent)"
+    },
+    {
+      "volume": "HCAL",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.0 }
+      ],
+      "_design": "Fe-scintillator, 13x13 / 26x26 cm cells"
+    }
+  ]
+}

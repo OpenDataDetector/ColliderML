@@ -1,0 +1,36 @@
+# ACTS TrackingGeometry conversion for CLD.
+#
+# DRAFT. CLD ships ACTS extensions on its tracking sub-detectors via k4geo's
+# `dd4hep::xml::Component` plugins; coverage is good for the vertex detector
+# and inner/outer trackers but thinner for endcap discs. If the auto-converter
+# fails to pick up a sub-detector, the most likely fix is to add the missing
+# `acts_extension` element in k4geo upstream rather than to override here.
+
+builder: dd4hep_auto
+
+dd4hep:
+  sub_detectors:
+    - VertexBarrel
+    - VertexEndcap
+    - InnerTrackerBarrel
+    - InnerTrackerEndcap
+    - OuterTrackerBarrel
+    - OuterTrackerEndcap
+    - ECalBarrel
+    - ECalEndcap
+    - HCalBarrel
+    - HCalEndcap
+    - YokeBarrel
+    - YokeEndcap
+  sensitive_match: '.*_sensor$|.*_silicon$'
+
+surface_array:
+  binning_tolerance_mm: 0.0
+  layer_envelope_r_mm:  1.0      # tighter than ODD; CLD layers are closer-spaced
+  layer_envelope_z_mm:  1.0
+
+material:
+  # No upstream map. Falls back to DD4hep-derived per-volume material until
+  # a CLD-specific map is generated. Mark this in the bundle status when
+  # promoting from "draft".
+  map_file: null

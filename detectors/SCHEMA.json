@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opendatadetector.github.io/colliderml/detectors/SCHEMA.json",
+  "title": "ColliderML detector bundle manifest",
+  "description": "Schema for `detector.yaml` files inside a ColliderML detector bundle. The pipeline reads exactly this file per bundle; everything else is reached through paths declared here.",
+  "type": "object",
+  "required": ["name", "version", "provenance", "geometry", "machine", "output_mapping"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Display name of the detector (e.g. 'ODD', 'CLD', 'LHCb').",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "description": "Bundle version. Independent of the upstream geometry version. Convention: ISO date or semver.",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["reference", "draft", "sketch"],
+      "description": "Maturity of the bundle. See top-level README for definitions."
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["upstream"],
+      "additionalProperties": false,
+      "properties": {
+        "upstream": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the upstream repository or release where the geometry comes from."
+        },
+        "upstream_path": {
+          "type": "string",
+          "description": "Path inside the upstream repo to the root compact XML (or equivalent)."
+        },
+        "upstream_revision": {
+          "type": "string",
+          "description": "Git SHA, tag, or release ID pinning the upstream source."
+        },
+        "license": {
+          "type": "string",
+          "description": "License of the upstream geometry assets."
+        }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "required": ["compact_xml"],
+      "additionalProperties": false,
+      "properties": {
+        "compact_xml": {
+          "type": "string",
+          "description": "Path (relative to the bundle root) to the root DD4hep compact XML."
+        },
+        "plugins": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Names of DD4hep plugin libraries that must be loadable (via DD4HEP_LIBRARY_PATH or system loader) for the geometry to construct. Names only — not paths. Discovery is the runtime's responsibility."
+        },
+        "extension_libs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional libraries that decorate the geometry with ACTS extensions, sensitive-detector wiring, or alignment hooks. Loaded after `plugins`."
+        }
+      }
+    },
+    "acts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tracking_config": {
+          "type": "string",
+          "description": "Path to the ACTS tracking-geometry converter config (YAML or JSON)."
+        },
+        "tracking_builder": {
+          "type": "string",
+          "enum": ["dd4hep_auto", "forward_custom", "external"],
+          "description": "Which ACTS tracking-geometry builder to use. `dd4hep_auto` works for barrel+endcap collider detectors with proper ACTS extensions; `forward_custom` is required for forward spectrometers like LHCb; `external` means the bundle ships a Python entry point that returns a `TrackingGeometry`."
+        },
+        "tracking_entry_point": {
+          "type": "string",
+          "description": "Required when `tracking_builder = external`. Python `module:callable` returning a TrackingGeometry."
+        },
+        "digi_config": {
+          "type": "string",
+          "description": "Path to the ACTS digitization config JSON."
+        },
+        "material_map": {
+          "type": ["string", "null"],
+          "description": "Optional path to a pre-computed ACTS material map ROOT file. Use null to assert that no map is bundled (forces ACTS to fall back to DD4hep-derived material)."
+        },
+        "seeding_config": {
+          "type": ["string", "null"],
+          "description": "Optional path to seed-finder tuning."
+        },
+        "ckf_config": {
+          "type": ["string", "null"],
+          "description": "Optional path to CKF / ambiguity-solver tuning."
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["uniform_solenoid", "field_map", "multi_region", "in_geometry"],
+          "description": "How the magnetic field is supplied. `uniform_solenoid` uses `Bz_T`; `field_map` uses `map_file`; `multi_region` uses `regions`; `in_geometry` means the DD4hep compact XML defines it and no extra info is needed."
+        },
+        "Bz_T": {
+          "type": "number",
+          "description": "Solenoid field strength in tesla. Required when `type = uniform_solenoid`."
+        },
+        "map_file": {
+          "type": "string",
+          "description": "Path to a ROOT field map. Required when `type = field_map`."
+        },
+        "regions": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "List of (region, type, parameters) entries. Required when `type = multi_region`."
+        },
+        "integral_Tm": {
+          "type": "number",
+          "description": "Integrated bending field along the beam direction, for documentation."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free-form notes about the field configuration (polarity, run-mode caveats, etc.)."
+        }
+      }
+    },
+    "machine": {
+      "type": "object",
+      "required": ["collider", "beam"],
+      "additionalProperties": false,
+      "properties": {
+        "collider": {
+          "type": "string",
+          "description": "Collider name (e.g. 'LHC', 'HL-LHC', 'FCC-ee', 'FCC-hh', 'ILC', 'CLIC', 'MuColl')."
+        },
+        "beam": {
+          "type": "string",
+          "description": "Beam composition (e.g. 'pp', 'e+e-', 'mu+mu-', 'PbPb')."
+        },
+        "cms_energy_GeV": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "array", "items": { "type": "number" } }
+          ],
+          "description": "Centre-of-mass energy or list of supported energies."
+        },
+        "default_vertex_distribution": {
+          "type": "object",
+          "description": "Default luminous-region size used by `merge_and_smear`. Per accelerator, not per detector — declared here for convenience.",
+          "properties": {
+            "sigma_x_um": { "type": "number" },
+            "sigma_y_um": { "type": "number" },
+            "sigma_z_mm": { "type": "number" }
+          }
+        },
+        "default_pileup_mu": {
+          "type": "number",
+          "description": "Suggested default pileup multiplicity for this machine."
+        },
+        "acceptance": {
+          "type": "object",
+          "description": "Detector acceptance in pseudorapidity. Used by the loader to refuse ill-defined runs (e.g. asking for full 4π parquet on LHCb).",
+          "properties": {
+            "eta_min": { "type": "number" },
+            "eta_max": { "type": "number" },
+            "topology": {
+              "type": "string",
+              "enum": ["barrel_endcap", "forward_single_arm", "forward_double_arm", "open"]
+            }
+          }
+        }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "description": "Override default simulation pipeline. If absent, the standard ddsim → ACTS path is used.",
+      "additionalProperties": false,
+      "properties": {
+        "primary": { "type": "string", "enum": ["ddsim", "external"] },
+        "optical": { "type": "string", "enum": ["none", "clsim", "external"] },
+        "photon_handoff": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "output_mapping": {
+      "type": "string",
+      "description": "Path to the schema mapping that translates DD4hep volume IDs to ColliderML parquet enums."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-form caveats. Surfaced by the loader on first use."
+    }
+  }
+}

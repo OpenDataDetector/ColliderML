@@ -1,0 +1,40 @@
+# ACTS TrackingGeometry conversion for ODD.
+#
+# The DD4hep auto-converter walks the ODD compact tree and turns volumes
+# tagged with the appropriate ACTS extensions into tracking surfaces. ODD
+# already has these extensions baked in; nothing per-volume to override.
+#
+# This file mirrors the configuration encoded in
+# `acts.examples.odd.getOpenDataDetector()` so the generic loader produces
+# the same TrackingGeometry as the legacy code path.
+
+builder: dd4hep_auto
+
+dd4hep:
+  # Sub-detectors to include. Names match the DD4hep `<detector name=...>`
+  # entries in `OpenDataDetector.xml`.
+  sub_detectors:
+    - BeamPipe
+    - Pixels
+    - PixelEndcaps
+    - ShortStrips
+    - ShortStripEndcaps
+    - LongStrips
+    - LongStripEndcaps
+    - SolenoidCoil
+    - ECalBarrel
+    - ECalEndcap
+    - HCalBarrel
+    - HCalEndcap
+  # Volume-name patterns ACTS treats as sensitive surfaces.
+  sensitive_match: '.*_sensor$'
+
+surface_array:
+  binning_tolerance_mm: 0.0
+  layer_envelope_r_mm:  2.0
+  layer_envelope_z_mm:  2.0
+
+material:
+  # Pre-computed map; consumed at TrackingGeometry build time.
+  map_file: acts/odd-material-maps.root
+  decorator: MaterialMapJsonConverter

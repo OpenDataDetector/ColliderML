@@ -1,0 +1,74 @@
+name: LHCb
+version: "2024-08-15"
+status: sketch
+
+provenance:
+  upstream: https://gitlab.cern.ch/lhcb/Detector
+  upstream_path: compact/run3/LHCb.xml
+  upstream_revision: v1r41
+  license: Apache-2.0
+
+geometry:
+  compact_xml: geometry/LHCb.xml
+  plugins:
+    - libDetDescDD4hep.so
+
+acts:
+  # Critical: LHCb is a forward single-arm spectrometer. ACTS' DD4hep
+  # auto-converter assumes barrel+endcap topology and cannot build a useful
+  # TrackingGeometry for VELO + UT + SciFi. We declare a custom builder and
+  # leave the entry point unimplemented (status = sketch).
+  tracking_builder: forward_custom
+  tracking_entry_point: colliderml_lhcb.tracking:build_lhcb_tracking_geometry
+  tracking_config: acts/tracking.yaml
+  digi_config:     acts/digi.json
+  material_map:    null
+  seeding_config:  reco/seeding.yaml
+  ckf_config:      reco/ckf.yaml
+
+field:
+  # LHCb's dipole magnet is non-uniform and direction-flippable (magnet up /
+  # magnet down). The compact XML defines a default; for serious runs a
+  # field map ROOT file is required.
+  type: in_geometry
+  integral_Tm: 4.0    # ~4 T·m bending power, polarity in geometry
+  notes: |
+    Real LHCb running uses ConditionsDB-served field maps that are flipped
+    every ~few weeks. For ColliderML samples we accept the in-XML default.
+
+machine:
+  collider: LHC
+  beam: pp
+  cms_energy_GeV: 13600.0
+  default_vertex_distribution:
+    # LHC luminous region with luminosity levelling at IP8.
+    sigma_x_um: 35.0
+    sigma_y_um: 35.0
+    sigma_z_mm: 50.0
+  default_pileup_mu: 5.0      # LHCb levels at <mu> ~ 5
+  acceptance:
+    # LHCb covers 2 < eta < 5 (forward arm only).
+    eta_min: 2.0
+    eta_max: 5.0
+    topology: forward_single_arm
+
+output_mapping: output/schema_mapping.yaml
+
+notes: |
+  Sketch bundle. Not runnable end-to-end through the standard pipeline.
+  Three known blockers:
+
+    1. ACTS forward tracking. The auto-converter does not handle LHCb's
+       layout. The bundle declares a `forward_custom` builder pointing at a
+       Python entry point that does not yet exist. Implementing it is its
+       own ~weeks-scale workstream involving a custom TrackingGeometryBuilder
+       for VELO + UT + SciFi.
+
+    2. Output schema. RICH (Cherenkov rings), HCAL with LHCb-specific
+       segmentation, and the M2-M5 muon stations have no representation in
+       the canonical ColliderML parquet enums. The schema_mapping for v1
+       drops these and exports only tracks + ECAL clusters; this is
+       documented but lossy.
+
+    3. Conditions / alignment. The pipeline runs with ideal alignment;
+       this is fine for ML samples but should be flagged on every run.

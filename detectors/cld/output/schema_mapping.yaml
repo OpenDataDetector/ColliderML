@@ -1,0 +1,44 @@
+# Map CLD DD4hep volume IDs onto the canonical ColliderML parquet enums.
+# DRAFT mapping — see this bundle's README for caveats.
+#
+# CLD's tracker partition does not match ODD's pixel/short/long division
+# cleanly. Choices made here:
+#   - VertexBarrel + VertexEndcap → pixel_*  (true MAPS pixels, ~25 um)
+#   - InnerTracker* → short_*  (silicon strips, intermediate radius)
+#   - OuterTracker* → long_*   (silicon strips, outer radius)
+# This is lossy. A proper schema extension (separate enums per detector
+# concept's tracker layout) is tracked as an open question in the planning
+# doc.
+#
+# Volume IDs are PLACEHOLDERS (-1). They must be replaced with real values
+# read from CLD_o2_v05.xml after `setup.sh` has populated `geometry/`.
+# The bundle loader should refuse to run a bundle whose mapping has any
+# -1 IDs.
+
+trackers:
+  pixel_neg_endcap:   { dd4hep_volume_id: -1, dd4hep_volume_name: VertexEndcap_neg }
+  pixel_barrel:       { dd4hep_volume_id: -1, dd4hep_volume_name: VertexBarrel }
+  pixel_pos_endcap:   { dd4hep_volume_id: -1, dd4hep_volume_name: VertexEndcap_pos }
+  short_neg_endcap:   { dd4hep_volume_id: -1, dd4hep_volume_name: InnerTrackerEndcap_neg }
+  short_barrel:       { dd4hep_volume_id: -1, dd4hep_volume_name: InnerTrackerBarrel }
+  short_pos_endcap:   { dd4hep_volume_id: -1, dd4hep_volume_name: InnerTrackerEndcap_pos }
+  long_neg_endcap:    { dd4hep_volume_id: -1, dd4hep_volume_name: OuterTrackerEndcap_neg }
+  long_barrel:        { dd4hep_volume_id: -1, dd4hep_volume_name: OuterTrackerBarrel }
+  long_pos_endcap:    { dd4hep_volume_id: -1, dd4hep_volume_name: OuterTrackerEndcap_pos }
+
+calorimeters:
+  ecal_neg_endcap:    { dd4hep_volume_id: -1, dd4hep_volume_name: ECalEndcap_neg }
+  ecal_barrel:        { dd4hep_volume_id: -1, dd4hep_volume_name: ECalBarrel }
+  ecal_pos_endcap:    { dd4hep_volume_id: -1, dd4hep_volume_name: ECalEndcap_pos }
+  hcal_neg_endcap:    { dd4hep_volume_id: -1, dd4hep_volume_name: HCalEndcap_neg }
+  hcal_barrel:        { dd4hep_volume_id: -1, dd4hep_volume_name: HCalBarrel }
+  hcal_pos_endcap:    { dd4hep_volume_id: -1, dd4hep_volume_name: HCalEndcap_pos }
+
+unmapped_volumes:
+  # Iron return yoke (instrumented muon system) — CLD plans to use this for
+  # muon ID but ColliderML's v1 schema has no muon-system enum. Ignored
+  # downstream until schema is extended.
+  - { id: -1, name: YokeBarrel }
+  - { id: -1, name: YokeEndcap }
+  - { id: -1, name: BeamPipe }
+  - { id: -1, name: SolenoidCoil }

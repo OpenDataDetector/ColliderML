@@ -1,0 +1,31 @@
+# Map ODD DD4hep volume IDs onto the canonical ColliderML parquet enums.
+# Canonical enum values are defined in `colliderml/physics/detector_enums.py`.
+#
+# Each entry: <enum_key>: { dd4hep_volume_id: int, dd4hep_volume_name: str }
+# `dd4hep_volume_name` is informational; the loader matches on volume_id.
+
+trackers:
+  pixel_neg_endcap:   { dd4hep_volume_id: 16, dd4hep_volume_name: PixelEndcaps_neg }
+  pixel_barrel:       { dd4hep_volume_id: 17, dd4hep_volume_name: Pixels }
+  pixel_pos_endcap:   { dd4hep_volume_id: 18, dd4hep_volume_name: PixelEndcaps_pos }
+  short_neg_endcap:   { dd4hep_volume_id: 23, dd4hep_volume_name: ShortStripEndcaps_neg }
+  short_barrel:       { dd4hep_volume_id: 24, dd4hep_volume_name: ShortStrips }
+  short_pos_endcap:   { dd4hep_volume_id: 25, dd4hep_volume_name: ShortStripEndcaps_pos }
+  long_neg_endcap:    { dd4hep_volume_id: 28, dd4hep_volume_name: LongStripEndcaps_neg }
+  long_barrel:        { dd4hep_volume_id: 29, dd4hep_volume_name: LongStrips }
+  long_pos_endcap:    { dd4hep_volume_id: 30, dd4hep_volume_name: LongStripEndcaps_pos }
+
+calorimeters:
+  ecal_neg_endcap:    { dd4hep_volume_id: 7,  dd4hep_volume_name: ECalEndcap_neg }
+  ecal_barrel:        { dd4hep_volume_id: 8,  dd4hep_volume_name: ECalBarrel }
+  ecal_pos_endcap:    { dd4hep_volume_id: 9,  dd4hep_volume_name: ECalEndcap_pos }
+  hcal_neg_endcap:    { dd4hep_volume_id: 12, dd4hep_volume_name: HCalEndcap_neg }
+  hcal_barrel:        { dd4hep_volume_id: 13, dd4hep_volume_name: HCalBarrel }
+  hcal_pos_endcap:    { dd4hep_volume_id: 14, dd4hep_volume_name: HCalEndcap_pos }
+
+# Volumes present in the geometry but not exported to parquet (beam pipe,
+# coil, support structures). Listed for completeness so the loader can warn
+# on volumes it hasn't seen instead of silently dropping them.
+unmapped_volumes:
+  - { id: 1,  name: BeamPipe }
+  - { id: 19, name: SolenoidCoil }

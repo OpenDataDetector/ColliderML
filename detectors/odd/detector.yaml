@@ -1,0 +1,49 @@
+name: ODD
+version: "2024-08-15"
+status: reference
+
+provenance:
+  upstream: https://github.com/OpenDataDetector/OpenDataDetector
+  upstream_path: xml/OpenDataDetector.xml
+  upstream_revision: v3.0.0
+  license: MPL-2.0
+
+geometry:
+  compact_xml: geometry/OpenDataDetector.xml
+  plugins:
+    - libOpenDataDetector.so
+
+acts:
+  tracking_builder: dd4hep_auto
+  tracking_config:  acts/tracking.yaml
+  digi_config:      acts/digi.json
+  material_map:     acts/odd-material-maps.root
+  seeding_config:   reco/seeding.yaml
+  ckf_config:       reco/ckf.yaml
+
+field:
+  type: uniform_solenoid
+  Bz_T: 2.0
+
+machine:
+  collider: HL-LHC-like
+  beam: pp
+  cms_energy_GeV: 14000
+  default_vertex_distribution:
+    sigma_x_um: 10.0
+    sigma_y_um: 10.0
+    sigma_z_mm: 50.0
+  default_pileup_mu: 60
+  acceptance:
+    eta_min: -3.0
+    eta_max:  3.0
+    topology: barrel_endcap
+
+output_mapping: output/schema_mapping.yaml
+
+notes: |
+  Reference bundle. The pipeline today targets ODD directly via
+  `acts.examples.odd.getOpenDataDetector()` and `getOpenDataDetectorDirectory()`.
+  This bundle reproduces those code paths through the generic loader so it
+  can serve as the regression test for the bundle abstraction:
+  byte-identical parquet on a fixed ttbar sample is the acceptance bar.

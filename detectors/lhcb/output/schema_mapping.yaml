@@ -1,0 +1,52 @@
+# Map LHCb DD4hep volume IDs onto the canonical ColliderML parquet enums.
+# SKETCH mapping — LHCb does not fit cleanly into the ODD-derived schema.
+#
+# Choices made:
+#   - VELO  -> pixel_pos_endcap     (forced; closest available enum)
+#   - UT    -> short_pos_endcap     (strip detector, intermediate position)
+#   - SciFi -> long_pos_endcap      (scintillating fibre, downstream)
+#   - ECAL  -> ecal_pos_endcap      (forward calo, fits enum)
+#   - HCAL  -> hcal_pos_endcap      (forward calo, fits enum)
+#
+# Sub-detectors with no canonical enum (RICH1, RICH2, M2-M5 muon stations)
+# are listed under `unmapped_volumes` and dropped from parquet output until
+# the schema is extended.
+#
+# Volume IDs are placeholders (-1); they need to be filled from
+# compact/run3/LHCb.xml after `setup.sh`. The bundle loader must reject
+# any -1 IDs at validation time.
+
+trackers:
+  # Negative-eta entries are absent on purpose — LHCb is a single-arm
+  # forward spectrometer covering 2 < eta < 5. The loader must not invent
+  # symmetric counterparts.
+  pixel_neg_endcap: null
+  pixel_barrel:     null
+  pixel_pos_endcap: { dd4hep_volume_id: -1, dd4hep_volume_name: VELO }
+  short_neg_endcap: null
+  short_barrel:     null
+  short_pos_endcap: { dd4hep_volume_id: -1, dd4hep_volume_name: UT }
+  long_neg_endcap:  null
+  long_barrel:      null
+  long_pos_endcap:  { dd4hep_volume_id: -1, dd4hep_volume_name: SciFi }
+
+calorimeters:
+  ecal_neg_endcap:  null
+  ecal_barrel:      null
+  ecal_pos_endcap:  { dd4hep_volume_id: -1, dd4hep_volume_name: ECAL }
+  hcal_neg_endcap:  null
+  hcal_barrel:      null
+  hcal_pos_endcap:  { dd4hep_volume_id: -1, dd4hep_volume_name: HCAL }
+
+unmapped_volumes:
+  # Sub-detectors that need v1 schema extensions. Listed so the loader can
+  # warn instead of silently dropping. PIDs live in `colliderml/physics/`
+  # extensions tracked in the planning doc's open questions.
+  - { id: -1, name: RICH1, kind: cherenkov }
+  - { id: -1, name: RICH2, kind: cherenkov }
+  - { id: -1, name: Muon_M2, kind: muon_station }
+  - { id: -1, name: Muon_M3, kind: muon_station }
+  - { id: -1, name: Muon_M4, kind: muon_station }
+  - { id: -1, name: Muon_M5, kind: muon_station }
+  - { id: -1, name: Magnet, kind: magnet }
+  - { id: -1, name: BeamPipe }

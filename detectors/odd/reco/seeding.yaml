@@ -1,0 +1,24 @@
+# ACTS seed-finder configuration for ODD.
+# Values mirror the defaults baked into the production `digi_and_reco.py`
+# when called against ODD. Tuned for HL-LHC-like pp at <mu> ~ 60.
+
+seed_finder:
+  rMax_mm:           200.0
+  deltaRMin_mm:        5.0
+  deltaRMax_mm:      270.0
+  collisionRegion_mm: 150.0
+  zMax_mm:           2000.0
+  zMin_mm:          -2000.0
+  maxSeedsPerSpM:      5
+  cotThetaMax:         7.40627    # eta = 3.0
+  sigmaScattering:     5.0
+  radLengthPerSeed:    0.1
+  minPt_MeV:         500.0
+  bFieldInZ_T:         2.0
+  beamPos_mm:        [0.0, 0.0]
+  impactMax_mm:        3.0
+
+space_points:
+  pixel_volumes:        [16, 17, 18]   # ODD pixel volume IDs
+  short_strip_volumes:  [23, 24, 25]
+  long_strip_volumes:   [28, 29, 30]

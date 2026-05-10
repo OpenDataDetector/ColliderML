@@ -1,0 +1,102 @@
+{
+  "_comment": "DRAFT digitization config for CLD. Numbers from arXiv:1911.12230 §3-4. The format mirrors ACTS' geometric digi config (cartesian smearing per surface). Geometry IDs are placeholders until the geometry has been loaded once and IDs read out of the DD4hep tree.",
+  "entries": [
+    {
+      "volume": "VertexBarrel",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.003 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 0.003 }
+      ],
+      "geometric": {
+        "segmentation": {
+          "binningdata": [
+            { "value": "x", "bins": 1024, "min": -0.0064, "max": 0.0064 },
+            { "value": "y", "bins":  256, "min": -0.0040, "max": 0.0040 }
+          ]
+        }
+      },
+      "_design": "25x25 um pitch CMOS MAPS"
+    },
+    {
+      "volume": "VertexEndcap",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.003 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 0.003 }
+      ],
+      "_design": "same MAPS as barrel"
+    },
+    {
+      "volume": "InnerTrackerBarrel",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.007 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 0.090 }
+      ],
+      "_design": "50x1000 um silicon, ~7 um in r-phi after charge sharing"
+    },
+    {
+      "volume": "InnerTrackerEndcap",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.007 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 0.090 }
+      ]
+    },
+    {
+      "volume": "OuterTrackerBarrel",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.007 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 0.090 }
+      ]
+    },
+    {
+      "volume": "OuterTrackerEndcap",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.007 },
+        { "index": 1, "type": "Gauss", "mean": 0.0, "stddev": 0.090 }
+      ]
+    },
+    {
+      "volume": "ECalBarrel",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.0 }
+      ],
+      "geometric": {
+        "segmentation": {
+          "binningdata": [
+            { "value": "x", "bins": 1, "min": -0.0025, "max": 0.0025 },
+            { "value": "y", "bins": 1, "min": -0.0025, "max": 0.0025 }
+          ]
+        }
+      },
+      "_design": "5x5 mm Si-W cells"
+    },
+    {
+      "volume": "ECalEndcap",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.0 }
+      ],
+      "_design": "5x5 mm Si-W cells"
+    },
+    {
+      "volume": "HCalBarrel",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.0 }
+      ],
+      "geometric": {
+        "segmentation": {
+          "binningdata": [
+            { "value": "x", "bins": 1, "min": -0.015, "max": 0.015 },
+            { "value": "y", "bins": 1, "min": -0.015, "max": 0.015 }
+          ]
+        }
+      },
+      "_design": "30x30 mm scintillator/Fe cells"
+    },
+    {
+      "volume": "HCalEndcap",
+      "smearing": [
+        { "index": 0, "type": "Gauss", "mean": 0.0, "stddev": 0.0 }
+      ],
+      "_design": "30x30 mm scintillator/Fe cells"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+# ACTS CKF config for CLD. DRAFT — inherits ODD defaults pending tuning.
+
+ckf:
+  chi2_cut_outlier:    15.0
+  chi2_cut_measurement: 7.0
+  num_measurements_cut_off: 10
+  branches_per_seed:    5
+
+ambiguity_solver:
+  maximum_shared_hits:  3
+  maximum_iterations:   1000000
+  n_measurements_min:   6        # CLD has fewer layers than ODD; lower minimum

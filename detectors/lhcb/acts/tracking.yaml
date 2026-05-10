@@ -1,0 +1,46 @@
+# ACTS TrackingGeometry config for LHCb.
+#
+# SKETCH. The DD4hep auto-converter cannot build LHCb. This file describes
+# the parameters the to-be-written custom builder
+# (`colliderml_lhcb.tracking:build_lhcb_tracking_geometry`) will consume.
+#
+# Geometry intuition:
+# - VELO is two halves of silicon planes around the IP, retracted ~30 mm
+#   during injection and closed to ~5 mm during stable beams. Real running
+#   alternates closed and open states; we describe only the closed state.
+# - UT sits ~2.3 m downstream of the IP, before the magnet, four planar
+#   stations of silicon strips.
+# - SciFi T1-T3 sit ~7-9 m downstream of the IP, after the magnet, three
+#   stations × four planar layers each of scintillating fibre mats.
+# - Magnet region (~3-5 m from IP) is where the navigator must be aware of
+#   strong, non-uniform field; not a tracking detector.
+
+builder: forward_custom
+
+stations:
+  velo:
+    type: planar_half_pixel
+    n_modules:    52              # 26 left + 26 right
+    z_range_mm:   [-275, 770]
+    inner_r_mm:    5.1            # closed-beam configuration
+    sensor_pitch_um: 55           # VeloPix
+  ut:
+    type: planar_strip
+    n_layers:     4
+    z_range_mm:   [2310, 2630]
+    half_width_x_m: 1.0
+    half_height_y_m: 1.2
+  scifi:
+    type: planar_fibre
+    n_stations:   3
+    n_layers_per_station: 4
+    z_range_mm:   [7700, 9410]
+    half_width_x_m:  3.0
+    half_height_y_m: 2.5
+
+magnet_region:
+  z_range_mm:   [3000, 5000]
+  notes: navigator must use field map / in-XML default; no tracking surfaces
+
+surface_array:
+  layer_envelope_mm: 5.0
