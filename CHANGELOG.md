@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.4.1] - 2026-05-27
+
+### Fixed
+- [library] `colliderml.simulate(events=N, pileup=M, seed=K)` kwargs now actually take effect. They used to be advertised in the user-facing "Running … (N events, pileup=M)" message, then silently dropped — the static per-stage YAML configs won. The fix writes a per-run overlay under `prod_root/.overlays/<run_id>/` with the kwargs applied; each stage reads the overlay instead of the static config.
+- [docs] Landing-page widget (`DataConfig.vue`) now filters channel buttons by the selected pileup level. The widget previously let users pick combinations that don't exist on Hub (e.g. `zee+pu0`, `higgs_portal+pu200`) and copied a CLI command that 404s on download. When the user switches pileup and the current channel isn't available there, the widget falls back to the first valid channel.
+- [docs] Tutorial chapter 2 rewritten to show the three simulate knobs (`channel`, `events`, `pileup`) explicitly instead of hiding them behind a preset name. Defaults to a fast `events=2 pileup=5` demo.
+
 ## [0.4.0] - 2026-05-27
 
 ### Added

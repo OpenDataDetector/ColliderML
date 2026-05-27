@@ -74,6 +74,73 @@ class SimulationResult:
         )
 
 
+def _apply_runtime_overrides(
+    manifest: list,
+    *,
+    prod_root: Path,
+    run_id: str,
+    events: int,
+    pileup: int,
+    seed: int,
+) -> list:
+    """Write per-run YAML overlays so the caller's kwargs actually take effect.
+
+    Each stage in the manifest points at a static YAML config under
+    ``prod_root/configs_development/docker_test/<channel>/``. Those YAMLs
+    have hardcoded ``events``/``pileup`` defaults (e.g. ``events: 10``).
+    Without this overlay step, the caller's ``simulate(events=2, pileup=5)``
+    kwargs get silently dropped — the YAML wins.
+
+    This helper:
+      1. Reads each stage's original YAML.
+      2. Overrides the ``events`` / ``pileup`` / ``seed`` keys with the
+         caller's values (only when the key already exists in the YAML —
+         we don't add fields that the stage script doesn't know about).
+      3. Writes the modified YAML to
+         ``prod_root/.overlays/<run_id>/<stage>_<original_basename>``.
+      4. Returns a manifest with each entry's ``config_path`` rewritten
+         to point at the overlay.
+
+    The overlay path stays under ``prod_root`` so the existing
+    ``--config /workspace/<config_path>`` in ``run_stage`` keeps working
+    unchanged. ``run_id`` namespacing lets concurrent runs coexist.
+    """
+    import yaml
+
+    overlay_root = prod_root / ".overlays" / run_id
+    overlay_root.mkdir(parents=True, exist_ok=True)
+
+    OVERRIDE_KEYS = {"events": events, "pileup": pileup, "seed": seed}
+
+    new_manifest = []
+    for stage in manifest:
+        orig_rel = stage["config_path"]
+        orig_path = prod_root / orig_rel
+        with open(orig_path) as f:
+            cfg = yaml.safe_load(f) or {}
+
+        # Only override keys the stage's config already declares — don't
+        # inject new fields. e.g. ttbar's madgraph_init_config.yaml has
+        # no `events` key (MadGraph init isn't event-count-driven), so we
+        # leave it alone.
+        for key, value in OVERRIDE_KEYS.items():
+            if key in cfg and value is not None:
+                cfg[key] = value
+
+        orig_basename = Path(orig_rel).name
+        overlay_rel = Path(".overlays") / run_id / f"{stage['stage']}__{orig_basename}"
+        overlay_path = prod_root / overlay_rel
+        overlay_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(overlay_path, "w") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+
+        new_stage = dict(stage)
+        new_stage["config_path"] = str(overlay_rel)
+        new_manifest.append(new_stage)
+
+    return new_manifest
+
+
 def _default_output_dir(channel: str, pileup: int, events: int) -> Path:
     """Compute a sensible default output directory if the caller didn't give one."""
     return (Path.cwd() / "colliderml_output" / f"{channel}_pu{pileup}_{events}evt").resolve()
@@ -234,6 +301,20 @@ def simulate(
             f"No stages were generated for channel '{resolved_channel}'. "
             f"Is the colliderml-production clone at {prod} up to date?"
         )
+
+    # Apply the caller's events / pileup / seed kwargs by writing per-run
+    # overlay YAMLs under prod_root/.overlays/<run_id>/. Each stage script
+    # reads its config from disk and uses whatever value is in the YAML,
+    # so without this overlay step the static configs win and the
+    # caller's kwargs get silently dropped after we've printed them back.
+    manifest = _apply_runtime_overrides(
+        manifest,
+        prod_root=prod,
+        run_id=run_id,
+        events=resolved_events,
+        pileup=resolved_pileup,
+        seed=seed,
+    )
 
     def _on_start(i: int, total: int, name: str) -> None:
         if not quiet:
