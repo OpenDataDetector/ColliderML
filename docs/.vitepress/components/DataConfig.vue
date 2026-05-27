@@ -64,7 +64,7 @@ async function fetchAvailableDatasets() {
   try {
     console.log('[ColliderML] Fetching available configs from HuggingFace...')
     const response = await fetch(
-      'https://huggingface.co/api/datasets/CERN/Colliderml-release-1'
+      'https://huggingface.co/api/datasets/CERN/ColliderML-Release-1'
     )
 
     if (!response.ok) {

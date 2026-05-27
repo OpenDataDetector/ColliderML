@@ -27,7 +27,7 @@ from datasets import load_dataset
 
 # Load the ttbar particles dataset (no pileup)
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
     split="train"
 )
@@ -129,21 +129,21 @@ from datasets import load_dataset
 
 # Load truth-level particles
 particles = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
     split="train"
 )
 
 # Load tracker hits (detector measurements)
 tracker_hits = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_tracker_hits",
     split="train"
 )
 
 # Load reconstructed tracks
 tracks = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_tracks",
     split="train"
 )
@@ -208,7 +208,7 @@ from datasets import load_dataset
 
 # Load in streaming mode
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
     split="train",
     streaming=True  # Enable streaming
@@ -229,7 +229,7 @@ ColliderML includes multiple physics processes:
 
 ```python
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
     split="train"
 )
@@ -239,7 +239,7 @@ dataset = load_dataset(
 
 ```python
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ggf_pu0_particles",
     split="train"
 )
@@ -249,13 +249,13 @@ dataset = load_dataset(
 
 ```python
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "dihiggs_pu0_particles",
     split="train"
 )
 ```
 
-Check the [CERN/Colliderml-release-1 dataset page](https://huggingface.co/datasets/CERN/Colliderml-release-1) for a complete list of available configurations.
+Check the [CERN/ColliderML-Release-1 dataset page](https://huggingface.co/datasets/CERN/ColliderML-Release-1) for a complete list of available configurations.
 
 ## Data Inspection Example
 
@@ -267,7 +267,7 @@ import numpy as np
 
 # Load dataset
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
     split="train"
 )
@@ -304,7 +304,7 @@ The datasets library integrates seamlessly with popular ML frameworks:
 from datasets import load_dataset
 
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
     split="train"
 )
@@ -341,4 +341,4 @@ If you encounter issues:
 
 - Check the [FAQ](./faq.md)
 - Visit our [GitHub Issues](https://github.com/OpenDataDetector/ColliderML/issues)
-- Consult the [CERN/Colliderml-release-1 dataset page](https://huggingface.co/datasets/CERN/Colliderml-release-1)
+- Consult the [CERN/ColliderML-Release-1 dataset page](https://huggingface.co/datasets/CERN/ColliderML-Release-1)
