@@ -1,6 +1,6 @@
 # Model Zoo
 
-**Live:** [huggingface.co/spaces/CERN/colliderml-model-zoo](https://huggingface.co/spaces/CERN/colliderml-model-zoo)
+**Live:** [huggingface.co/spaces/murnanedaniel/colliderml-model-zoo](https://huggingface.co/spaces/murnanedaniel/colliderml-model-zoo)
 **Source:** [`spaces/model-zoo/`](https://github.com/OpenDataDetector/ColliderML/tree/main/spaces/model-zoo)
 
 A browser for HuggingFace models tagged `colliderml`. Discovery is

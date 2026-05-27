@@ -53,9 +53,8 @@ presets:
     pileup: 200
     description: "Higgs portal, 1000 events, full pileup (benchmark-scale)"
 
-  # --- Single-particle debugging ------------------------------------------
-  single-muon:
-    channel: single_muon
-    events: 100
-    pileup: 0
-    description: "Single muon gun, 100 events, no pileup (~5 min)"
+# NOTE: the `single-muon` preset has been removed in v0.4.0. The
+# production single-muon dataset uses an ACTS particle-gun generator
+# (scripts/simulation/particlegun_gen.py), but pipeline.py currently
+# routes single_muon through pythia_generation. Will be reintroduced
+# in v0.4.1 once the channel-stage routing is fixed.

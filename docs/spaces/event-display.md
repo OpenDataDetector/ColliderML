@@ -1,6 +1,6 @@
 # Event Display
 
-**Live:** [huggingface.co/spaces/CERN/colliderml-event-display](https://huggingface.co/spaces/CERN/colliderml-event-display)
+**Live:** [huggingface.co/spaces/murnanedaniel/colliderml-event-display](https://huggingface.co/spaces/murnanedaniel/colliderml-event-display)
 **Source:** [`spaces/event-display/`](https://github.com/OpenDataDetector/ColliderML/tree/main/spaces/event-display)
 
 Interactive 3D viewer for single events from the ColliderML datasets.

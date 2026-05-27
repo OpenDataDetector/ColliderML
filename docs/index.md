@@ -67,11 +67,11 @@ Use the configurator below to customize your dataset selection and generate the 
 If there are errors or unexpected behavior, please [open an issue](https://github.com/OpenDataDetector/ColliderML/issues) on the GitHub repository.
 <!-- CHANGELOG:DATASET:START -->
 ::: details Dataset Changelog (latest 5)
+- (0.4.0 — 2026-05-27) - HF-native leaderboard score store: `huggingface.co/datasets/CERN/colliderml-benchmark-results` receives one JSON per submission at `results/<task>/<user>/<sha12>.json`. Pairs with the new client-side `colliderml.tasks.submit(..., model_repo_id=...)` which also lands a `.eval_results/colliderml_<task>.yaml` on the user's HF model repo so scores auto-render on the model card.
+- (0.4.0 — 2026-05-27) - `CERN/ColliderML-Release-1` configs reorganised: per-pileup/per-object split (`{channel}_{pileup}_{tracker_hits,particles,calo_hits,tracks}`) replaces the prior monolithic per-channel layout. Enables event-range-scoped downloads (the `tracking` eval split is now ~700 MB to pull instead of multiple GB).
 - (0.2.0 — 2025-11-07) - Datasets now hosted on HuggingFace Hub for easier access and distribution.
 - (0.2.0 — 2025-11-07) - Support for standard HuggingFace `datasets` library for data loading.
 - (0.2.0 — 2025-11-07) - Migrated from NERSC manifest-based distribution to HuggingFace datasets.
-- (0.2.0 — 2025-11-07) - Data now stored in Parquet format with improved compression and accessibility.
-- (0.1.0 — 2025-09-08) - Initial release of ColliderML dataset with ttbar and ggf physics processes.
 See the full changelog: [Changelog](/changelog).
 :::
 <!-- CHANGELOG:DATASET:END -->
