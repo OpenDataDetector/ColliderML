@@ -124,6 +124,7 @@ def submit(
     task_name: str,
     predictions: Any,
     *,
+    model_repo_id: str | None = None,
     backend_url: str | None = None,
 ) -> Dict[str, Any]:
     """Upload predictions to the backend leaderboard and return its response.
@@ -133,10 +134,18 @@ def submit(
     ``POST /v1/benchmark/<task_name>/submit``. The backend re-scores with
     its canonical truth set and may award credits for new bests.
 
+    If *model_repo_id* is supplied (e.g. ``"user/my-tracker"``), the
+    backend pushes a ``.eval_results/colliderml_{task}.yaml`` file to that
+    HuggingFace model repo so the scores appear on the model card. The
+    backend's service account must have write access — add it as a
+    collaborator on your model repo first.
+
     Args:
         task_name: Registered task name.
         predictions: Path to a parquet file, a pyarrow Table, or a pandas
             DataFrame.
+        model_repo_id: Optional HuggingFace model repo (e.g.
+            ``"user/my-tracker"``) to link scores to via ``.eval_results``.
         backend_url: Override the default backend URL.
 
     Returns:
@@ -178,6 +187,8 @@ def submit(
         "predictions": ("predictions.parquet", buf.getvalue(), "application/octet-stream"),
     }
     data = {"local_scores": json.dumps(local_scores)}
+    if model_repo_id:
+        data["model_repo_id"] = model_repo_id
 
     response = requests.post(
         f"{url}/v1/benchmark/{task_name}/submit",

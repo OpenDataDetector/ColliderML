@@ -51,6 +51,7 @@ const config = defineConfig({
             { text: 'Introduction', link: '/guide/introduction' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Quickstart', link: '/guide/quickstart' },
+            { text: 'Platform tutorial', link: '/guide/tutorial' },
             { text: 'Local simulation', link: '/guide/simulation' },
             { text: 'Remote simulation', link: '/guide/remote-simulation' },
             { text: 'Benchmark tasks', link: '/guide/tasks' },

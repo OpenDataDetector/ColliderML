@@ -10,6 +10,13 @@ The ColliderML dataset provides comprehensive simulation data for machine learni
 
 </AboutData>
 
+::: tip New to the platform?
+Start with the [platform tutorial](/guide/tutorial) — a six-chapter,
+runnable walkthrough that covers loading data, local simulation,
+remote (SaaS) simulation, benchmark submission, and publishing a
+model to the zoo.
+:::
+
 ## What you can do
 
 - **Load** pre-generated events: `colliderml.load("ttbar_pu0")` — downloads on first call, then caches.

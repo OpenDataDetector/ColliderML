@@ -29,7 +29,6 @@ from colliderml.core.hf_download import (
     DEFAULT_DATASET_ID,
     DownloadSpec,
     download_config,
-    list_local_configs,
 )
 from colliderml.core.loader import load_tables as _core_load_tables
 from colliderml.core.tables import select_events
@@ -73,18 +72,27 @@ def _ensure_local(
     *,
     dataset_id: str,
     revision: Optional[str] = None,
+    max_events: Optional[int] = None,
+    event_range: Optional[Tuple[int, int]] = None,
 ) -> None:
-    """Download any missing per-object configs into the local cache."""
-    local = set(list_local_configs(None, dataset_id))
+    """Download any missing shards for each per-object config.
+
+    ``max_events`` and ``event_range`` are forwarded to
+    :class:`DownloadSpec` so the download layer fetches only the shards
+    actually needed — not the entire config (which is up to ~700 GB for
+    the high-pileup tracker tables). We always call
+    :func:`download_config`; per-shard dedup against the local cache
+    happens inside it via :func:`hf_hub_download`.
+    """
     for obj in tables:
         cfg_name = f"{channel}_{pileup}_{obj}"
-        if cfg_name in local:
-            continue
         download_config(
             DownloadSpec(
                 dataset_id=dataset_id,
                 config=cfg_name,
                 revision=revision,
+                max_events=max_events,
+                event_range=event_range,
             )
         )
 
@@ -185,7 +193,15 @@ def load(
     object_tables = list(tables) if tables is not None else list(DEFAULT_OBJECT_TABLES)
 
     if auto_download:
-        _ensure_local(channel, pileup, object_tables, dataset_id=repo, revision=revision)
+        _ensure_local(
+            channel,
+            pileup,
+            object_tables,
+            dataset_id=repo,
+            revision=revision,
+            max_events=max_events,
+            event_range=event_range,
+        )
 
     config = LoaderConfig(
         dataset_id=repo,
