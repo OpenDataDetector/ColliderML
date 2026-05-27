@@ -12,7 +12,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, Tuple
 
 from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
 
@@ -20,6 +20,12 @@ from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
 DEFAULT_DATASET_ID = "CERN/ColliderML-Release-1"
 DEFAULT_SPLIT = "train"
 DATA_DIR_ENV = "COLLIDERML_DATA_DIR"
+
+#: Release-1 convention: every per-object config holds ~100k events,
+#: distributed evenly across whatever number of shards the config has.
+#: Used to map ``event_range`` / ``max_events`` to a shard slice without
+#: having to read parquet metadata over the wire.
+DEFAULT_TOTAL_EVENTS_PER_CONFIG = 100_000
 
 
 def default_data_dir() -> Path:
@@ -91,13 +97,50 @@ def _list_remote_shards(
 
 @dataclass(frozen=True)
 class DownloadSpec:
-    """Specification for downloading a dataset configuration."""
+    """Specification for downloading a dataset configuration.
+
+    At most one of ``max_events`` and ``event_range`` should be set. When
+    both are ``None`` the entire config+split is fetched.
+    """
 
     dataset_id: str = DEFAULT_DATASET_ID
     config: str = "ttbar_pu0_particles"
     split: str = DEFAULT_SPLIT
     revision: Optional[str] = None
     max_events: Optional[int] = None
+    event_range: Optional[Tuple[int, int]] = None
+
+
+def _events_per_shard(
+    num_shards: int, total_events: int = DEFAULT_TOTAL_EVENTS_PER_CONFIG
+) -> int:
+    if num_shards <= 0:
+        return total_events
+    return max(1, total_events // num_shards)
+
+
+def _shards_for_event_range(
+    shards: list[str], event_range: Tuple[int, int]
+) -> list[str]:
+    """Pick the subset of sorted shards covering events in ``[start, end)``."""
+    if not shards:
+        return []
+    start, end = int(event_range[0]), int(event_range[1])
+    if end <= start:
+        return []
+    eps = _events_per_shard(len(shards))
+    first = max(0, start // eps)
+    last = min(len(shards), (end + eps - 1) // eps)
+    return shards[first:last]
+
+
+def _shards_for_max_events(shards: list[str], max_events: int) -> list[str]:
+    """Pick the smallest prefix of sorted shards covering ``max_events`` events."""
+    if not shards:
+        return []
+    eps = _events_per_shard(len(shards))
+    count = max(1, (int(max_events) + eps - 1) // eps)
+    return shards[: min(count, len(shards))]
 
 
 @dataclass(frozen=True)
@@ -122,25 +165,50 @@ def download_config(
     """Download Parquet shards for a dataset config into a local directory.
 
     Behavior:
-    - If `spec.max_events` is None: download all shards for the config+split.
-    - If `spec.max_events` is set: download shards sequentially from the start
-      until at least `max_events` events are available (may exceed slightly).
+    - If neither ``spec.max_events`` nor ``spec.event_range`` is set:
+      download every shard of the config+split.
+    - If ``spec.event_range = (start, end)`` is set: download only the
+      shards covering that half-open event range, using a uniform-shard
+      heuristic (``DEFAULT_TOTAL_EVENTS_PER_CONFIG`` events spread evenly
+      across shards). The Polars loader filters precisely on event id
+      after the download.
+    - If ``spec.max_events`` is set (and ``event_range`` is not):
+      download enough leading shards to cover at least ``max_events``
+      events, again under the uniform-shard heuristic.
 
     Args:
         spec: Download specification.
-        out_dir: Base output directory. Defaults to `default_data_dir()`.
+        out_dir: Base output directory. Defaults to ``default_data_dir()``.
         force: If True, re-download files even if they already exist.
 
     Returns:
         DownloadResult: metadata including local path and downloaded shards.
+
+    Raises:
+        ValueError: If both ``max_events`` and ``event_range`` are set.
+        FileNotFoundError: If the config has no shards on the remote.
     """
+    if spec.max_events is not None and spec.event_range is not None:
+        raise ValueError("DownloadSpec accepts at most one of max_events and event_range.")
+
     data_dir = (out_dir or default_data_dir()).expanduser().resolve()
     config_dir = local_config_dir(data_dir, spec.dataset_id, spec.config)
     config_dir.mkdir(parents=True, exist_ok=True)
 
+    shards = _list_remote_shards(spec.dataset_id, spec.config, spec.split, spec.revision)
+    if not shards:
+        raise FileNotFoundError(
+            f"No shards found for dataset={spec.dataset_id} config={spec.config} split={spec.split}"
+        )
+
     shard_paths: list[str]
-    if spec.max_events is None:
-        # Download everything for this config/split in one go.
+    if spec.event_range is not None:
+        shard_paths = _shards_for_event_range(shards, spec.event_range)
+    elif spec.max_events is not None:
+        shard_paths = _shards_for_max_events(shards, spec.max_events)
+    else:
+        # Unbounded: snapshot_download is faster than per-file when we
+        # really do want every shard.
         allow_patterns = [f"data/{spec.config}/{spec.split}-*.parquet"]
         snapshot_download(
             repo_id=spec.dataset_id,
@@ -151,30 +219,15 @@ def download_config(
             allow_patterns=allow_patterns,
             force_download=force,
         )
-        shard_paths = _list_remote_shards(spec.dataset_id, spec.config, spec.split, spec.revision)
-    else:
-        # Deterministic incremental download of shards until we reach max_events.
-        # Note: event-count inspection is deferred to the Polars loader stage.
-        # Here we approximate by downloading the first N shards, assuming
-        # relatively uniform shard sizes; we always download at least 1 shard.
-        shards = _list_remote_shards(spec.dataset_id, spec.config, spec.split, spec.revision)
-        if not shards:
-            raise FileNotFoundError(
-                f"No shards found for dataset={spec.dataset_id} config={spec.config} split={spec.split}"
-            )
-        # Heuristic: in Release-1 many configs are sharded as 1000 files for 100k events.
-        # Avoid over-downloading by taking a conservative shard count.
-        # The loader will still enforce max_events precisely.
-        per_shard_guess = 100
-        shard_count = max(1, (spec.max_events + per_shard_guess - 1) // per_shard_guess)
-        shard_paths = shards[: shard_count]
+        shard_paths = shards
 
+    if spec.event_range is not None or spec.max_events is not None:
         for fp in shard_paths:
             local_file = config_dir / fp
             local_file.parent.mkdir(parents=True, exist_ok=True)
             if local_file.exists() and not force:
                 continue
-            downloaded = hf_hub_download(
+            hf_hub_download(
                 repo_id=spec.dataset_id,
                 repo_type="dataset",
                 revision=spec.revision,
@@ -183,8 +236,6 @@ def download_config(
                 local_dir_use_symlinks=False,
                 force_download=force,
             )
-            # hf_hub_download returns the resolved path; ensure it exists.
-            Path(downloaded).exists()
 
     result = DownloadResult(
         local_dir=config_dir,

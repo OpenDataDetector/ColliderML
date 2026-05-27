@@ -53,14 +53,22 @@ if [[ -z "${BACKEND_DIR}" || ! -d "${BACKEND_DIR}" ]]; then
 fi
 
 if [[ -z "${HF_USER}" ]]; then
-    if command -v huggingface-cli >/dev/null 2>&1; then
+    # huggingface_hub 1.14+ replaced `huggingface-cli` with `hf`; the
+    # old binary still exists but only prints a deprecation notice and
+    # exits non-zero. Prefer the new CLI; fall back to the old one for
+    # venvs that haven't been upgraded yet.
+    if command -v hf >/dev/null 2>&1; then
+        # `hf auth whoami` prints e.g. "user=murnanedaniel orgs=CERN,..."
+        HF_USER=$(hf auth whoami 2>/dev/null | head -n1 | sed -n 's/^user=\([^ ]*\).*/\1/p' || true)
+    fi
+    if [[ -z "${HF_USER}" ]] && command -v huggingface-cli >/dev/null 2>&1; then
         HF_USER=$(huggingface-cli whoami 2>/dev/null | head -n1 || true)
     fi
 fi
 if [[ -z "${HF_USER}" ]]; then
     echo "error: no HuggingFace username supplied." >&2
     echo "       pass it as the second argument, set \$HF_USERNAME," >&2
-    echo "       or run 'huggingface-cli login' first." >&2
+    echo "       or run 'hf auth login' first." >&2
     exit 2
 fi
 
@@ -109,14 +117,39 @@ while true; do
     sleep 2
 done
 
+# --- register user (first /v1/me hit creates the row + seed credits) --
+
+if [[ -z "${HF_TOKEN:-}" ]]; then
+    if [[ -f "${HOME}/.cache/huggingface/token" ]]; then
+        HF_TOKEN=$(cat "${HOME}/.cache/huggingface/token")
+    fi
+fi
+if [[ -z "${HF_TOKEN:-}" ]]; then
+    echo "error: no HF token available." >&2
+    echo "       run 'huggingface-cli login' or set \$HF_TOKEN." >&2
+    exit 5
+fi
+
+echo "[setup] registering ${HF_USER} via /v1/me (creates user row on first hit) ..."
+me_status=$(curl -s -o /tmp/setup-me-resp.$$ -w "%{http_code}" \
+    "${BACKEND_URL}/v1/me" \
+    -H "Authorization: Bearer ${HF_TOKEN}")
+if [[ "${me_status}" != "200" ]]; then
+    echo "error: /v1/me returned ${me_status}:" >&2
+    cat /tmp/setup-me-resp.$$ >&2 || true
+    rm -f /tmp/setup-me-resp.$$
+    exit 6
+fi
+rm -f /tmp/setup-me-resp.$$
+
 # --- grant tutorial credits -------------------------------------------
 
 echo "[setup] granting ${TUTORIAL_CREDITS} tutorial credits to ${HF_USER} ..."
 grant_status=$(curl -s -o /tmp/setup-grant-resp.$$ -w "%{http_code}" \
     -X POST "${BACKEND_URL}/admin/grant" \
-    -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+    -H "X-Admin-Token: ${ADMIN_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "{\"hf_username\": \"${HF_USER}\", \"credits\": ${TUTORIAL_CREDITS}}")
+    -d "{\"hf_username\": \"${HF_USER}\", \"delta\": ${TUTORIAL_CREDITS}, \"reason\": \"tutorial_setup\"}")
 if [[ "${grant_status}" != "200" ]]; then
     echo "error: /admin/grant returned ${grant_status}:" >&2
     cat /tmp/setup-grant-resp.$$ >&2 || true

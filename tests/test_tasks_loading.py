@@ -51,8 +51,17 @@ def test_load_task_data_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     # translation logic in load_task_data itself.
     calls: Dict[str, object] = {}
 
-    def fake_ensure(channel: str, pileup: str, tables, *, dataset_id: str) -> None:
+    def fake_ensure(
+        channel: str,
+        pileup: str,
+        tables,
+        *,
+        dataset_id: str,
+        max_events=None,
+        event_range=None,
+    ) -> None:
         calls["ensure"] = (channel, pileup, list(tables), dataset_id)
+        calls["ensure_bounds"] = (max_events, event_range)
 
     stub_frame = pl.DataFrame(
         {
