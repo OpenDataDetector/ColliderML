@@ -113,20 +113,42 @@ that bundles MadGraph, Pythia, Geant4 + ddsim, and ACTS. The
 hard-scatter generation → parton shower → detector simulation →
 track reconstruction — in a single call.
 
-For this chapter we use the `higgs-portal-quick` preset — ten
-Higgs-portal events with low pileup, ~10 minutes on a modern laptop.
+Three knobs control what you actually generate:
+
+- **`channel`** — the physics process (`ttbar`, `higgs_portal`, …; see
+  `colliderml.simulate.load_presets()` for the wired-up channels).
+- **`events`** — how many hard-scatter events. Each one costs ~10–30 s
+  of Geant4 stepping on a typical laptop CPU.
+- **`pileup`** — average soft pp interactions overlaid per hard scatter.
+  `0` is fastest (signal only); LHC reality is ~200. Cost scales
+  roughly linearly with pileup.
+
+For this chapter we set the three knobs explicitly to tiny values so
+the whole pipeline finishes in ~2 minutes. Bump them once you have
+time:
 
 ```python
-from colliderml.simulate import load_presets
 import colliderml
 
-for name, cfg in load_presets().items():
-    print(f"  {name:24}  channel={cfg['channel']:14} events={cfg['events']:>4} pileup={cfg['pileup']}")
+CHANNEL = "higgs_portal"
+EVENTS = 2
+PILEUP = 5
 
-result = colliderml.simulate(preset="higgs-portal-quick", quiet=True)
+result = colliderml.simulate(
+    channel=CHANNEL,
+    events=EVENTS,
+    pileup=PILEUP,
+    quiet=True,
+)
 print("run directory:", result.run_dir)
 print("stages run:   ", [s.name for s in result.stages])
 ```
+
+Presets are also available as named bundles of the same three knobs —
+`colliderml.simulate(preset="ttbar-quick")` is equivalent to setting
+`channel="ttbar", events=10, pileup=0`. List them with
+`colliderml.simulate.load_presets()`. The tutorial uses explicit knobs
+so the dimensions stay visible.
 
 ### What just happened
 
@@ -470,7 +492,7 @@ from huggingface_hub import create_repo, upload_folder
 frames = colliderml.load("ttbar_pu0", tables=["tracker_hits"], max_events=200)
 
 # 2. Run the pipeline locally
-result = colliderml.simulate(preset="higgs-portal-quick")
+result = colliderml.simulate(channel="higgs_portal", events=2, pileup=5)
 
 # 3. Submit a remote simulation
 sub = remote.submit(channel="ttbar", events=10_000, pileup=200)

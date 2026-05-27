@@ -14,8 +14,9 @@ const expanded = ref({
 })
 
 // Available data from HuggingFace
-const channelTypes = ref([])
+const channelTypes = ref([])      // every (channel) we've ever seen — filtered for display
 const pileupTypes = ref([])
+const channelsByPileup = ref({})  // { "pu0": Set<channel>, "pu200": Set<channel> }
 const loading = ref(true)
 
 // Fixed object types for all ColliderML datasets (sizes loaded dynamically)
@@ -90,30 +91,34 @@ async function fetchAvailableDatasets() {
       throw new Error('No configs found in dataset')
     }
 
-    // Parse configs to extract processes and pileup levels
+    // Parse configs into a per-pileup channel map so the channel buttons
+    // can be filtered when the user changes the pileup level. The dataset
+    // doesn't have every (channel × pileup) combination — e.g. `zee` is
+    // PU=200 only, `higgs_portal` is PU=0 only — so showing them all at
+    // once produces commands that 404 on download.
     const processes = new Set()
     const pileups = new Set()
+    const byPileup = {}
 
     configs.forEach(config => {
       const parts = config.split('_')
-      if (parts.length >= 3) {
-        // Handle multi-word processes like "dihiggs"
-        const objectTypes = ['particles', 'tracker', 'calo', 'tracks']
-        let pileupIdx = parts.findIndex(p => p.startsWith('pu'))
-
-        if (pileupIdx > 0) {
-          const process = parts.slice(0, pileupIdx).join('_')
-          const pileup = parts[pileupIdx]
-          processes.add(process)
-          pileups.add(pileup)
-        }
+      const pileupIdx = parts.findIndex(p => p.startsWith('pu'))
+      if (pileupIdx > 0) {
+        const process = parts.slice(0, pileupIdx).join('_')  // handles "higgs_portal" etc.
+        const pileup = parts[pileupIdx]
+        processes.add(process)
+        pileups.add(pileup)
+        if (!byPileup[pileup]) byPileup[pileup] = new Set()
+        byPileup[pileup].add(process)
       }
     })
 
     console.log('[ColliderML] Found processes:', Array.from(processes))
     console.log('[ColliderML] Found pileups:', Array.from(pileups))
+    console.log('[ColliderML] Channels per pileup:',
+      Object.fromEntries(Object.entries(byPileup).map(([p, s]) => [p, Array.from(s)])))
 
-    channelTypes.value = Array.from(processes).map(ch => ({
+    channelTypes.value = Array.from(processes).sort().map(ch => ({
       id: ch,
       label: ch,
       available: true
@@ -124,6 +129,11 @@ async function fetchAvailableDatasets() {
       label: pu === 'pu0' ? 'No Pileup (pu0)' : `Pileup ${pu.replace('pu', '')}`,
       available: true
     }))
+
+    // Store the per-pileup channel map (Sets serialised as plain objects).
+    channelsByPileup.value = Object.fromEntries(
+      Object.entries(byPileup).map(([p, s]) => [p, Array.from(s)])
+    )
 
     loading.value = false
 
@@ -148,16 +158,40 @@ onMounted(async () => {
   await fetchAvailableDatasets()
 })
 
+// Channels that actually exist at the currently-selected pileup level.
+// This is what the template iterates — channel buttons appear/disappear
+// as the user switches PU=0 vs PU=200.
+const availableChannelsForPileup = computed(() => {
+  const pileup = selections.value.pileup
+  const available = new Set(channelsByPileup.value[pileup] || [])
+  return channelTypes.value.filter(ch => available.has(ch.id))
+})
+
 // Check if current selection is available
 const isDatasetAvailable = computed(() => {
   const channel = selections.value.channels[0]
   const pileup = selections.value.pileup
 
-  const hasChannel = channelTypes.value.some(ch => ch.id === channel)
+  const hasChannel = availableChannelsForPileup.value.some(ch => ch.id === channel)
   const hasPileup = pileupTypes.value.some(pu => pu.id === pileup)
 
   return hasChannel && hasPileup
 })
+
+// When the user switches pileup level, the current channel may not exist
+// at the new pileup (e.g. switching from pu0 to pu200 while `higgs_portal`
+// is selected). Auto-fall-back to the first available channel.
+const onPileupChange = (newPileup) => {
+  selections.value.pileup = newPileup
+  const valid = new Set(channelsByPileup.value[newPileup] || [])
+  const current = selections.value.channels[0]
+  if (!valid.has(current)) {
+    const fallback = Array.from(valid).sort()[0]
+    if (fallback) {
+      selections.value.channels = [fallback]
+    }
+  }
+}
 
 // Size estimation (MB per 1000 events per object)
 const estimatedSizeMB = computed(() => {
@@ -311,7 +345,7 @@ const formatEventCount = (count) => {
               :key="pu.id"
               class="select-button"
               :class="{ selected: selections.pileup === pu.id }"
-              @click="selections.pileup = pu.id"
+              @click="onPileupChange(pu.id)"
             >
               {{ pu.label }}
             </button>
@@ -321,9 +355,9 @@ const formatEventCount = (count) => {
         <!-- Channels Card -->
         <div class="config-card">
           <div class="card-header">
-            <h4>Physics Process</h4>
+            <h4>Physics Process <span class="muted-note">(available at {{ selections.pileup }})</span></h4>
             <button
-              v-if="channelTypes.length > 3"
+              v-if="availableChannelsForPileup.length > 3"
               class="expand-button"
               :class="{ expanded: expanded.channels }"
               @click="toggleExpand('channels')"
@@ -333,7 +367,7 @@ const formatEventCount = (count) => {
           </div>
           <div class="button-grid">
             <button
-              v-for="channel in expanded.channels ? channelTypes : channelTypes.slice(0, 3)"
+              v-for="channel in expanded.channels ? availableChannelsForPileup : availableChannelsForPileup.slice(0, 3)"
               :key="channel.id"
               class="select-button"
               :class="{ selected: isSelected('channels', channel.id) }"
@@ -516,6 +550,13 @@ h4 {
 
 .card-header h4 {
   margin: 0;
+}
+
+.muted-note {
+  color: var(--vp-c-text-3);
+  font-size: 0.85em;
+  font-weight: normal;
+  margin-left: 4px;
 }
 
 .expand-button {
