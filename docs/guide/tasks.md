@@ -145,6 +145,6 @@ at collider trigger latencies.
 
 - Browse the [API reference](../library/tasks.md) for every function signature
 - Read about [remote simulation](./remote-simulation.md) to generate training data
-- Check the live [Leaderboard](https://huggingface.co/spaces/ColliderML/leaderboard)
+- Check the live [Leaderboard](https://huggingface.co/spaces/murnanedaniel/colliderml-leaderboard)
   (deployed from this repo's `spaces/leaderboard/`)
 - Open a PR to add a new task or baseline — contributors earn credits!

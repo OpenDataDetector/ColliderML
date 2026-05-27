@@ -247,4 +247,4 @@ installed.
 - [Benchmark Tasks guide](../guide/tasks.md) — conceptual overview
 - [`colliderml.load`](./loading.md) — the low-level loader used by tasks
 - [`colliderml.remote`](./remote.md) — the SaaS client used by `submit()`
-- [Leaderboard Space](https://huggingface.co/spaces/ColliderML/leaderboard) — live rankings
+- [Leaderboard Space](https://huggingface.co/spaces/murnanedaniel/colliderml-leaderboard) — live rankings

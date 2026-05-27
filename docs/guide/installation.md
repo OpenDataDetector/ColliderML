@@ -99,7 +99,7 @@ print(f"ColliderML version: {colliderml.__version__}")
 # Test loading a dataset
 from datasets import load_dataset
 dataset = load_dataset(
-    "CERN/Colliderml-release-1",
+    "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
     split="train"
 )
