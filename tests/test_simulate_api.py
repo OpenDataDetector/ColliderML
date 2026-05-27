@@ -64,6 +64,18 @@ def _install_simulate_stubs(
     def fake_generate_stage_manifest(channel: str, *, prod_root: Path) -> List[Dict[str, str]]:
         captured["manifest_channel"] = channel
         captured["manifest_prod_root"] = prod_root
+        # Materialise stub YAML files alongside the manifest entries so the
+        # runtime-overrides overlay step (which reads each stage's YAML to
+        # apply events/pileup/seed kwargs) has something to load.
+        import yaml as _yaml
+        cfg_dir = prod_root / f"configs_development/docker_test/{channel}"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        (cfg_dir / "pythia_config.yaml").write_text(
+            _yaml.safe_dump({"events": 10, "pileup": 10, "seed": 42})
+        )
+        (cfg_dir / "simulation_config.yaml").write_text(
+            _yaml.safe_dump({"events": 10, "pileup": 10, "seed": 42})
+        )
         return [
             {
                 "name": "Pythia Generation",
@@ -179,3 +191,117 @@ def test_simulation_result_list_files_includes_stage_output(
     )
     files = result.list_files()
     assert any(fp.name == "merged_events.hepmc3" for fp in files)
+
+
+# ---------------------------------------------------------------------------
+# Runtime override overlays (events / pileup / seed kwargs actually take effect)
+# ---------------------------------------------------------------------------
+class TestRuntimeOverrides:
+    """``simulate(events=N, pileup=M)`` must propagate into the per-stage
+    YAML configs that the container reads. Without the overlay step the
+    static YAMLs win and the caller's kwargs get silently dropped after
+    the user-facing 'Running … (N events, pileup=M)' message."""
+
+    def test_overlay_overrides_events_pileup_seed(self, tmp_path: Path) -> None:
+        import yaml as _yaml
+        from colliderml.simulate.api import _apply_runtime_overrides
+
+        # Fake prod_root with one stage config containing all three keys.
+        cfg_dir = tmp_path / "configs_development/docker_test/higgs_portal"
+        cfg_dir.mkdir(parents=True)
+        cfg_path = cfg_dir / "pythia_config.yaml"
+        cfg_path.write_text(_yaml.safe_dump({
+            "events": 10, "pileup": 10, "seed": 42, "channel": "higgs_portal",
+        }))
+
+        manifest = [{
+            "name": "Pythia Generation",
+            "stage": "pythia_generation",
+            "script": "simulation/pythia_gen.py",
+            "config_path": "configs_development/docker_test/higgs_portal/pythia_config.yaml",
+        }]
+
+        new_manifest = _apply_runtime_overrides(
+            manifest, prod_root=tmp_path, run_id="0",
+            events=2, pileup=5, seed=99,
+        )
+        # config_path was rewritten to the overlay
+        assert new_manifest[0]["config_path"].startswith(".overlays/0/")
+        overlay = tmp_path / new_manifest[0]["config_path"]
+        assert overlay.exists()
+
+        # Loaded values reflect the kwargs
+        loaded = _yaml.safe_load(overlay.read_text())
+        assert loaded["events"] == 2
+        assert loaded["pileup"] == 5
+        assert loaded["seed"] == 99
+
+    def test_overlay_preserves_unrelated_keys(self, tmp_path: Path) -> None:
+        import yaml as _yaml
+        from colliderml.simulate.api import _apply_runtime_overrides
+
+        cfg_dir = tmp_path / "configs_development/docker_test/higgs_portal"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "pythia_config.yaml").write_text(_yaml.safe_dump({
+            "events": 10,
+            "pythia_settings": ["Higgs:useBSM = on", "35:m0 = 125.0"],
+            "vertex_sigma_xy": 0.0125,
+        }))
+
+        manifest = [{"name": "P", "stage": "pythia_generation",
+                     "script": "s", "config_path": "configs_development/docker_test/higgs_portal/pythia_config.yaml"}]
+        new_manifest = _apply_runtime_overrides(
+            manifest, prod_root=tmp_path, run_id="0",
+            events=2, pileup=5, seed=42,
+        )
+        loaded = _yaml.safe_load((tmp_path / new_manifest[0]["config_path"]).read_text())
+        assert loaded["events"] == 2
+        # Hand-crafted Pythia knobs survive
+        assert loaded["pythia_settings"] == ["Higgs:useBSM = on", "35:m0 = 125.0"]
+        assert loaded["vertex_sigma_xy"] == 0.0125
+
+    def test_overlay_skips_missing_keys(self, tmp_path: Path) -> None:
+        """A stage's YAML without an ``events`` key shouldn't gain one —
+        e.g. madgraph_init_config doesn't take an event count, we shouldn't
+        forge it into the config."""
+        import yaml as _yaml
+        from colliderml.simulate.api import _apply_runtime_overrides
+
+        cfg_dir = tmp_path / "configs_development/docker_test/ttbar"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "madgraph_init_config.yaml").write_text(_yaml.safe_dump({
+            "process": "p p > t t~",
+            "order": "NLO",
+            # no `events`, no `pileup`
+        }))
+        manifest = [{"name": "MG init", "stage": "madgraph_init",
+                     "script": "s", "config_path": "configs_development/docker_test/ttbar/madgraph_init_config.yaml"}]
+        new_manifest = _apply_runtime_overrides(
+            manifest, prod_root=tmp_path, run_id="0",
+            events=2, pileup=5, seed=42,
+        )
+        loaded = _yaml.safe_load((tmp_path / new_manifest[0]["config_path"]).read_text())
+        assert "events" not in loaded
+        assert "pileup" not in loaded
+        # Stage-specific keys preserved
+        assert loaded["process"] == "p p > t t~"
+
+    def test_overlay_per_run_id_namespacing(self, tmp_path: Path) -> None:
+        import yaml as _yaml
+        from colliderml.simulate.api import _apply_runtime_overrides
+
+        cfg = tmp_path / "configs_development/docker_test/higgs_portal/pythia_config.yaml"
+        cfg.parent.mkdir(parents=True)
+        cfg.write_text(_yaml.safe_dump({"events": 10, "pileup": 10}))
+        manifest = [{"name": "P", "stage": "pythia_generation",
+                     "script": "s", "config_path": "configs_development/docker_test/higgs_portal/pythia_config.yaml"}]
+
+        _apply_runtime_overrides(manifest, prod_root=tmp_path, run_id="alpha",
+                                 events=2, pileup=5, seed=42)
+        _apply_runtime_overrides(manifest, prod_root=tmp_path, run_id="beta",
+                                 events=99, pileup=200, seed=42)
+
+        alpha = _yaml.safe_load((tmp_path / ".overlays/alpha/pythia_generation__pythia_config.yaml").read_text())
+        beta = _yaml.safe_load((tmp_path / ".overlays/beta/pythia_generation__pythia_config.yaml").read_text())
+        assert alpha["events"] == 2 and alpha["pileup"] == 5
+        assert beta["events"] == 99 and beta["pileup"] == 200
