@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+import os
+import re
+from typing import Dict, Optional, Tuple
 
 import pyarrow as pa
 
@@ -17,9 +19,37 @@ from colliderml.tasks.tracking.metrics import (
 )
 
 
+def _parse_event_range_env(value: str) -> Optional[Tuple[int, int]]:
+    """Parse ``"start:end"`` or ``"start,end"`` into ``(start, end)``.
+
+    Returns ``None`` (and lets the caller fall back to the default) if
+    the value can't be parsed — tutorials shouldn't crash on a typo in
+    an optional env var.
+    """
+    match = re.match(r"^\s*(\d+)\s*[:,]\s*(\d+)\s*$", value)
+    if not match:
+        return None
+    start, end = int(match.group(1)), int(match.group(2))
+    if end <= start:
+        return None
+    return (start, end)
+
+
 @register
 class TrackingTask(BenchmarkTask):
-    """Reconstruct tracks in a ttbar + PU=200 environment."""
+    """Reconstruct tracks in a ttbar + PU=200 environment.
+
+    Two env vars override the defaults for tutorial / small-machine
+    deploys without changing the class-level config:
+
+    - ``COLLIDERML_TRACKING_DATASET`` — e.g. ``"ttbar_pu0"`` to swap
+      PU=200 for the much smaller PU=0 split.
+    - ``COLLIDERML_TRACKING_EVAL_RANGE`` — ``"start:end"`` (half-open).
+      Shrinks the held-out eval slice; useful when paired with PU=0 so
+      a fresh user can run chapter 4 of the tutorial without OOM.
+
+    Both default to production values when the env vars are unset.
+    """
 
     name = "tracking"
     dataset = "ttbar_pu200"
@@ -32,6 +62,20 @@ class TrackingTask(BenchmarkTask):
         "dup_rate": False,
         "physics_eff_pt1": True,
     }
+
+    def __init__(self) -> None:
+        # Class-level defaults stay as `dataset` / `eval_event_range`;
+        # we shadow them per-instance only when the env vars are set,
+        # so unrelated tests and production deploys see exactly the
+        # values they used to.
+        ds_override = os.environ.get("COLLIDERML_TRACKING_DATASET", "").strip()
+        if ds_override:
+            self.dataset = ds_override
+        er_override = os.environ.get("COLLIDERML_TRACKING_EVAL_RANGE", "").strip()
+        if er_override:
+            parsed = _parse_event_range_env(er_override)
+            if parsed is not None:
+                self.eval_event_range = parsed
 
     def load_eval_inputs(self) -> Dict[str, pa.Table]:
         return {"tracker_hits": self.load_truth_hits()}

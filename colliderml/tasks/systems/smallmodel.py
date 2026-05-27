@@ -15,6 +15,7 @@ from colliderml.polars import explode_event_table_pyarrow
 from colliderml.tasks import register
 from colliderml.tasks._base import BenchmarkTask
 from colliderml.tasks.tracking.metrics import trackml_weighted_efficiency
+from colliderml.tasks.tracking.task import _parse_event_range_env
 
 #: Parameter-count caps for each tier (inclusive upper bound).
 PARAM_TIERS: List[int] = [10_000, 100_000, 1_000_000]
@@ -30,7 +31,12 @@ def tier_for(n_params: int) -> int:
 
 @register
 class TrackingSmallModelTask(BenchmarkTask):
-    """Tracking with a parameter budget."""
+    """Tracking with a parameter budget.
+
+    Shares :class:`TrackingTask`'s ``COLLIDERML_TRACKING_DATASET`` and
+    ``COLLIDERML_TRACKING_EVAL_RANGE`` env-var overrides so tutorial
+    deploys can swap PU=200 for PU=0 without touching code.
+    """
 
     name = "tracking_small"
     dataset = "ttbar_pu200"
@@ -38,6 +44,18 @@ class TrackingSmallModelTask(BenchmarkTask):
     inputs = ["tracker_hits"]
     metrics = ["trackml_eff", "n_params", "tier"]
     higher_is_better = {"trackml_eff": True, "n_params": False, "tier": False}
+
+    def __init__(self) -> None:
+        import os
+
+        ds_override = os.environ.get("COLLIDERML_TRACKING_DATASET", "").strip()
+        if ds_override:
+            self.dataset = ds_override
+        er_override = os.environ.get("COLLIDERML_TRACKING_EVAL_RANGE", "").strip()
+        if er_override:
+            parsed = _parse_event_range_env(er_override)
+            if parsed is not None:
+                self.eval_event_range = parsed
 
     def load_eval_inputs(self) -> Dict[str, pa.Table]:
         return {"tracker_hits": self._load_flat_hits()}
