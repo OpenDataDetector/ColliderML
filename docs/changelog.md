@@ -4,9 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [0.4.0] - 2026-04-09
+## [0.4.0] - 2026-05-27
 
 ### Added
+- [dataset] HF-native leaderboard score store: `huggingface.co/datasets/CERN/colliderml-benchmark-results` receives one JSON per submission at `results/<task>/<user>/<sha12>.json`. Pairs with the new client-side `colliderml.tasks.submit(..., model_repo_id=...)` which also lands a `.eval_results/colliderml_<task>.yaml` on the user's HF model repo so scores auto-render on the model card.
+- [dataset] `CERN/ColliderML-Release-1` configs reorganised: per-pileup/per-object split (`{channel}_{pileup}_{tracker_hits,particles,calo_hits,tracks}`) replaces the prior monolithic per-channel layout. Enables event-range-scoped downloads (the `tracking` eval split is now ~700 MB to pull instead of multiple GB).
 - [library] Top-level `colliderml.load(dataset, *, tables, max_events, event_range, …)` — a one-liner that downloads missing parquets on demand, then loads them with the existing Polars backend. Uses the same `<channel>_<pileup>` shorthand as the benchmark task runner.
 - [library] `colliderml.simulate` subpackage — run the full Pythia / MadGraph / Geant4 / ACTS pipeline locally inside a Docker or Podman container, or submit to the SaaS backend with `remote=True`. Local simulate auto-clones the companion `colliderml-production` repo at a pinned git ref for pipeline scripts, mirroring the existing ODD and MG5aMC_PY8_interface cache pattern. Ships a bundled preset catalogue (`ttbar-quick`, `higgs-portal-quick`, `ttbar-dev`, `ttbar-benchmark`, …) accessible via `colliderml.simulate.load_presets()`.
 - [library] `colliderml.remote` subpackage — HTTP client for the ColliderML SaaS backend service. Exposes `submit`, `status`, `wait_for`, `get_me`, `balance`, and a `RemoteSubmission` dataclass. Authentication is via a HuggingFace token resolved from the environment or the hub's saved credentials.

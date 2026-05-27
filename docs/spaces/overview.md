@@ -65,7 +65,7 @@ HuggingFace Spaces have a built-in iframe embed:
 
 ```html
 <iframe
-    src="https://huggingface.co/spaces/CERN/colliderml-event-display"
+    src="https://huggingface.co/spaces/murnanedaniel/colliderml-event-display"
     frameborder="0"
     width="850"
     height="450">

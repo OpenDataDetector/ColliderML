@@ -37,11 +37,11 @@ COLLIDERML_PRODUCTION_REPO = "https://github.com/OpenDataDetector/colliderml-pro
 #: this. Can also be overridden per-invocation via ``COLLIDERML_PRODUCTION_REF``.
 #:
 #: .. note::
-#:    During the v0.4.0 migration window this tracks ``staging`` so local
-#:    sim works against the active branch; once ``pipeline-v0.1.0`` is
-#:    tagged in the production repo (Phase E of the migration), bump this
-#:    constant to the tag.
-COLLIDERML_PRODUCTION_REF = "staging"
+#:    For v0.4.0+ this is pinned to the ``pipeline-v0.1.0`` tag on the
+#:    colliderml-production repo so local sim is reproducible across
+#:    upstream pipeline changes. Bump in lockstep with future pipeline
+#:    tags when the upstream cuts a new pipeline release.
+COLLIDERML_PRODUCTION_REF = "pipeline-v0.1.0"
 
 #: Environment variable override for the pinned ref (useful for testing
 #: against an in-flight branch of the production repo).

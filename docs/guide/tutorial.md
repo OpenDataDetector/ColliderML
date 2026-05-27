@@ -113,8 +113,8 @@ that bundles MadGraph, Pythia, Geant4 + ddsim, and ACTS. The
 hard-scatter generation → parton shower → detector simulation →
 track reconstruction — in a single call.
 
-For this chapter we use the `single-muon` preset, the fastest (~5
-minutes on a modern laptop).
+For this chapter we use the `higgs-portal-quick` preset — ten
+Higgs-portal events with low pileup, ~10 minutes on a modern laptop.
 
 ```python
 from colliderml.simulate import load_presets
@@ -123,7 +123,7 @@ import colliderml
 for name, cfg in load_presets().items():
     print(f"  {name:24}  channel={cfg['channel']:14} events={cfg['events']:>4} pileup={cfg['pileup']}")
 
-result = colliderml.simulate(preset="single-muon", quiet=True)
+result = colliderml.simulate(preset="higgs-portal-quick", quiet=True)
 print("run directory:", result.run_dir)
 print("stages run:   ", [s.name for s in result.stages])
 ```
@@ -385,7 +385,7 @@ the backend score it.
 
 The ColliderML model zoo is a thin HuggingFace Hub filter: any model
 on the Hub tagged `colliderml` shows up in
-[`spaces/model-zoo`](https://huggingface.co/spaces/OpenDataDetector/colliderml-model-zoo).
+[`spaces/model-zoo`](https://huggingface.co/spaces/murnanedaniel/colliderml-model-zoo).
 There's no backend registry, no approval process — the `tag` is the
 contract. Publishing is a standard `huggingface_hub.create_repo` +
 `upload_folder`.
@@ -470,7 +470,7 @@ from huggingface_hub import create_repo, upload_folder
 frames = colliderml.load("ttbar_pu0", tables=["tracker_hits"], max_events=200)
 
 # 2. Run the pipeline locally
-result = colliderml.simulate(preset="single-muon")
+result = colliderml.simulate(preset="higgs-portal-quick")
 
 # 3. Submit a remote simulation
 sub = remote.submit(channel="ttbar", events=10_000, pileup=200)

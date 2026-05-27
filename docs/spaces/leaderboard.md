@@ -1,6 +1,6 @@
 # Leaderboard
 
-**Live:** [huggingface.co/spaces/CERN/colliderml-leaderboard](https://huggingface.co/spaces/CERN/colliderml-leaderboard)
+**Live:** [huggingface.co/spaces/murnanedaniel/colliderml-leaderboard](https://huggingface.co/spaces/murnanedaniel/colliderml-leaderboard)
 **Source:** [`spaces/leaderboard/`](https://github.com/OpenDataDetector/ColliderML/tree/main/spaces/leaderboard)
 
 Public scoreboard for the six benchmark tasks shipped in
