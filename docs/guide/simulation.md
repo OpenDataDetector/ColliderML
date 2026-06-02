@@ -3,7 +3,7 @@
 ColliderML can generate new events on your own machine using the full
 physics pipeline: Pythia (or MadGraph + Pythia for NLO processes) →
 Geant4 detector simulation via DDSim → digitisation and track
-reconstruction via ACTS → parquet conversion. Everything runs inside the
+reconstruction via ACTS, which writes the parquet outputs directly. Everything runs inside the
 official OpenDataDetector software container, so you do not need to
 install any HEP tooling yourself — just Docker or Podman.
 
@@ -107,7 +107,7 @@ colliderml list-presets
 | `measurements.root` | Digitisation | ACTS ROOT |
 | `particles.root` | Truth particles | ACTS ROOT |
 | `tracksummary_ambi.root` | Reconstruction | ACTS ROOT |
-| `*.parquet` | Parquet conversion | Parquet |
+| `*.parquet` | Digitisation / reconstruction | Parquet |
 
 The parquet outputs can be loaded with the same
 [`colliderml.load()`](../library/loading.md) helper used for the released

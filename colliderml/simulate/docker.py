@@ -26,9 +26,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional
 
-#: Default OpenDataDetector software image. Pinned to a known-good tag;
+#: Default OpenDataDetector software image. Pinned to a known-good digest;
 #: override with ``image=...`` on :func:`simulate` or the ``--image`` CLI flag.
-DEFAULT_IMAGE = "ghcr.io/opendatadetector/sw:0.2.2_linux-ubuntu24.04_gcc-13.3.0"
+#:
+#: This is the native-Arrow image: ACTS built with the Arrow/Parquet plugin so
+#: the digitization stage writes parquet directly (replacing convert_all.py,
+#: which crashed on merged-cluster measurements). Pinned by digest to the
+#: linux-ubuntu24.04 (x86_64) build from OpenDataDetector/sw PR #3 while the
+#: upstream Arrow PRs land; switch to the released ``sw`` tag once they merge.
+DEFAULT_IMAGE = "ghcr.io/opendatadetector/sw@sha256:6b9b4fc3d4a3ed53d32114c2a6afdae5f6d4ced313805509a2a27fb1045a4c83"
 
 #: Git repository that houses the simulation pipeline scripts and configs.
 COLLIDERML_PRODUCTION_REPO = "https://github.com/OpenDataDetector/colliderml-production.git"
@@ -37,11 +43,12 @@ COLLIDERML_PRODUCTION_REPO = "https://github.com/OpenDataDetector/colliderml-pro
 #: this. Can also be overridden per-invocation via ``COLLIDERML_PRODUCTION_REF``.
 #:
 #: .. note::
-#:    For v0.4.0+ this is pinned to the ``pipeline-v0.1.0`` tag on the
-#:    colliderml-production repo so local sim is reproducible across
-#:    upstream pipeline changes. Bump in lockstep with future pipeline
+#:    Pinned to the ``pipeline-v0.2.0`` tag on the colliderml-production repo:
+#:    the digitization stage emits ACTS-native parquet directly (merging on),
+#:    which replaces the convert_all.py post-processing. Requires the
+#:    native-Arrow :data:`DEFAULT_IMAGE`. Bump in lockstep with future pipeline
 #:    tags when the upstream cuts a new pipeline release.
-COLLIDERML_PRODUCTION_REF = "pipeline-v0.1.0"
+COLLIDERML_PRODUCTION_REF = "pipeline-v0.2.0"
 
 #: Environment variable override for the pinned ref (useful for testing
 #: against an in-flight branch of the production repo).
