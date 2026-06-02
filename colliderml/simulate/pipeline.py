@@ -46,6 +46,13 @@ class Stage:
 #:
 #: Ordering matters — stages run sequentially, and later stages depend on
 #: artefacts from earlier ones.
+#:
+#: Digitization & Reconstruction is the final stage: it writes the
+#: tracker_hits / particles / tracks / calo_hits parquet directly via the ACTS
+#: Arrow plugin (requires the native-Arrow image, see
+#: :data:`~colliderml.simulate.docker.DEFAULT_IMAGE`). This replaced the former
+#: separate "Parquet Conversion" (convert_all.py) stage, which crashed on
+#: merged-cluster measurements.
 CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
     "higgs_portal": (
         Stage(
@@ -65,12 +72,6 @@ CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
             stage="digitization",
             script="simulation/digi_and_reco.py",
             config="digitization_config.yaml",
-        ),
-        Stage(
-            name="Parquet Conversion",
-            stage="convert_all",
-            script="postprocessing/convert_all.py",
-            config="convert_all.yaml",
         ),
     ),
     "ttbar": (
@@ -104,12 +105,6 @@ CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
             script="simulation/digi_and_reco.py",
             config="digitization_config.yaml",
         ),
-        Stage(
-            name="Parquet Conversion",
-            stage="convert_all",
-            script="postprocessing/convert_all.py",
-            config="convert_all.yaml",
-        ),
     ),
     "single_muon": (
         Stage(
@@ -129,12 +124,6 @@ CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
             stage="digitization",
             script="simulation/digi_and_reco.py",
             config="digitization_config.yaml",
-        ),
-        Stage(
-            name="Parquet Conversion",
-            stage="convert_all",
-            script="postprocessing/convert_all.py",
-            config="convert_all.yaml",
         ),
     ),
 }
