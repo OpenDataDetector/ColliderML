@@ -107,7 +107,7 @@ scan these shards without exploding them into flat tables.
 ## Chapter 2 — Run the pipeline yourself: local simulation
 
 ColliderML ships a container
-(`ghcr.io/opendatadetector/sw:0.2.2_linux-ubuntu24.04_gcc-13.3.0`)
+(`ghcr.io/opendatadetector/sw`)
 that bundles MadGraph, Pythia, Geant4 + ddsim, and ACTS. The
 `colliderml.simulate` subpackage drives the full pipeline —
 hard-scatter generation → parton shower → detector simulation →
