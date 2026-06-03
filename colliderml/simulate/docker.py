@@ -34,7 +34,7 @@ from typing import Callable, List, Optional
 #: which crashed on merged-cluster measurements). Pinned by digest to the
 #: linux-ubuntu24.04 (x86_64) build from OpenDataDetector/sw PR #3 while the
 #: upstream Arrow PRs land; switch to the released ``sw`` tag once they merge.
-DEFAULT_IMAGE = "ghcr.io/opendatadetector/sw@sha256:6b9b4fc3d4a3ed53d32114c2a6afdae5f6d4ced313805509a2a27fb1045a4c83"
+DEFAULT_IMAGE = "ghcr.io/opendatadetector/sw@sha256:20e4df7b0d6befd70ce0113d852350b25cbd9aac659d1bc530036a2c85a68f89"
 
 #: Git repository that houses the simulation pipeline scripts and configs.
 COLLIDERML_PRODUCTION_REPO = "https://github.com/OpenDataDetector/colliderml-production.git"
@@ -43,12 +43,13 @@ COLLIDERML_PRODUCTION_REPO = "https://github.com/OpenDataDetector/colliderml-pro
 #: this. Can also be overridden per-invocation via ``COLLIDERML_PRODUCTION_REF``.
 #:
 #: .. note::
-#:    Pinned to the ``pipeline-v0.2.0`` tag on the colliderml-production repo:
+#:    Pinned to the ``pipeline-v0.2.1`` tag on the colliderml-production repo:
 #:    the digitization stage emits ACTS-native parquet directly (merging on),
-#:    which replaces the convert_all.py post-processing. Requires the
-#:    native-Arrow :data:`DEFAULT_IMAGE`. Bump in lockstep with future pipeline
-#:    tags when the upstream cuts a new pipeline release.
-COLLIDERML_PRODUCTION_REF = "pipeline-v0.2.0"
+#:    which replaces the convert_all.py post-processing, and uses ODD v5.0.0
+#:    (the released-dataset tag). Requires the native-Arrow :data:`DEFAULT_IMAGE`.
+#:    Bump in lockstep with future pipeline tags when the upstream cuts a new
+#:    pipeline release.
+COLLIDERML_PRODUCTION_REF = "pipeline-v0.2.1"
 
 #: Environment variable override for the pinned ref (useful for testing
 #: against an in-flight branch of the production repo).
@@ -304,35 +305,17 @@ def clone_colliderml_production(
 def _ensure_external_caches(prod_root: Path) -> Path:
     """Populate the on-host ``.cache`` directory inside the production checkout.
 
-    Mirrors the behaviour of the original production-repo ``_docker.py``:
-    clones OpenDataDetector v4.0.4 and MG5aMC_PY8_interface into
-    ``<prod_root>/.cache/`` so the container can find them at
-    ``/cache/odd-v4`` and ``/cache/MG5aMC_PY8_interface``.
+    Clones MG5aMC_PY8_interface into ``<prod_root>/.cache/`` so the container
+    can find it at ``/cache/MG5aMC_PY8_interface``.
 
-    These are cloned on the *host* (where network works) because the
-    container itself has no outbound network access.
+    OpenDataDetector is *not* cloned here: the sw image bakes ODD v5.0.0 in at
+    ``/opt/odd`` (the tag the released dataset was generated with), and the
+    in-container ``setup_container_env.sh`` uses it directly — or, on an image
+    without a baked ODD, clones v5.0.0 itself (resolving the LFS material map,
+    since git-lfs lives in the container, not necessarily on the host).
     """
     cache_dir = prod_root / ".cache"
     cache_dir.mkdir(exist_ok=True)
-
-    odd_marker = cache_dir / "odd-v4" / "xml" / "OpenDataDetector.xml"
-    if not odd_marker.exists():
-        print("Cloning OpenDataDetector v4.0.4 into simulate cache ...")
-        subprocess.run(
-            [
-                "git",
-                "clone",
-                "--quiet",
-                "--depth",
-                "1",
-                "--branch",
-                "v4.0.4",
-                "https://gitlab.cern.ch/acts/OpenDataDetector.git",
-                str(cache_dir / "odd-v4"),
-            ],
-            capture_output=True,
-            timeout=300,
-        )
 
     mg5_marker = cache_dir / "MG5aMC_PY8_interface" / "MG5aMC_PY8_interface.cc"
     if not mg5_marker.exists():
