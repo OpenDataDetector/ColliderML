@@ -93,8 +93,10 @@ const config = defineConfig({
       proxy: {
         // ColliderML SaaS backend (sim API + copilot /v1/chat). Proxied so the
         // browser talks to one origin and the API key stays server-side.
+        // Defaults to the deployed Render backend; override with COLLIDERML_BACKEND
+        // (e.g. http://localhost:8000) to point at a local backend.
         '/v1': {
-          target: process.env.COLLIDERML_BACKEND || 'http://localhost:8000',
+          target: process.env.COLLIDERML_BACKEND || 'https://colliderml-backend.onrender.com',
           changeOrigin: true,
         },
         '/nersc': {
