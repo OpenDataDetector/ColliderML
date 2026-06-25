@@ -24,6 +24,7 @@ const config = defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Library', link: '/library/overview' },
+      { text: 'Visualize', link: '/visualize' },
       { text: 'Builder', link: '/builder' },
       { text: 'Spaces', link: '/spaces/overview' },
       { text: 'Appendices', link: '/appendices' }

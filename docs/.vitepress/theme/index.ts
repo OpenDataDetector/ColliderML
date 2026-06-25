@@ -5,6 +5,7 @@ import DataConfig from '../components/DataConfig.vue'
 import AboutData from '../components/AboutData.vue'
 import WorkflowBuilder from '../components/WorkflowBuilder.vue'
 import Copilot from '../components/Copilot.vue'
+import EventDisplay from '../components/EventDisplay.vue'
 import './custom.css'
 
 export default {
@@ -20,5 +21,6 @@ export default {
     app.component('AboutData', AboutData)
     app.component('WorkflowBuilder', WorkflowBuilder)
     app.component('Copilot', Copilot)
+    app.component('EventDisplay', EventDisplay)
   },
 } as Theme
