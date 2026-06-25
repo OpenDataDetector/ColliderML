@@ -5,6 +5,7 @@ import {
   store, snapshot, addStage, removeStage, updateStage, reorder, validate,
   toSimulatePayload,
 } from '../composables/workflow'
+import { apiUrl } from '../composables/api'
 
 const route = useRoute()
 const isBuilder = computed(() => route.path.includes('builder'))
@@ -16,6 +17,8 @@ const input = ref('')
 const scroller = ref<HTMLElement | null>(null)
 const configured = ref<boolean | null>(null)
 const providerLabel = ref('')
+const waking = ref(false)
+const dotClass = computed(() => (waking.value ? 'waking' : configured.value ? 'on' : 'off'))
 
 // Full API transcript (Anthropic block format) + a render-friendly view.
 type Msg = { role: 'user' | 'assistant'; content: any }
@@ -38,13 +41,37 @@ const bubbles = computed<Bubble[]>(() => {
   return out
 })
 
-async function checkHealth() {
+async function pingHealth(timeoutMs: number): Promise<any | null> {
   try {
-    const r = await fetch('/v1/chat/health')
-    const d = await r.json()
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), timeoutMs)
+    const r = await fetch(apiUrl('/v1/chat/health'), { signal: ctrl.signal })
+    clearTimeout(t)
+    return r.ok ? await r.json() : null
+  } catch {
+    return null
+  }
+}
+
+async function checkHealth() {
+  // The backend is on Render's free tier and spins down when idle, so the first
+  // request after a while can take ~30-60s to cold-start. Show a "waking" state
+  // and keep polling rather than flashing "unreachable".
+  let d = await pingHealth(8000)
+  if (!d) {
+    waking.value = true
+    providerLabel.value = 'waking the backend…'
+    const deadline = Date.now() + 60000
+    while (!d && Date.now() < deadline) {
+      await new Promise((res) => setTimeout(res, 5000))
+      d = await pingHealth(8000)
+    }
+    waking.value = false
+  }
+  if (d) {
     configured.value = d.configured
     providerLabel.value = d.configured ? `${d.provider}/${d.model}` : 'not configured'
-  } catch {
+  } else {
     configured.value = false
     providerLabel.value = 'backend unreachable'
   }
@@ -76,7 +103,7 @@ async function doSubmit(): Promise<any> {
   if (issues.length) return { error: 'validation errors', issues }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (store.hfToken) headers['Authorization'] = `Bearer ${store.hfToken}`
-  const r = await fetch('/v1/simulate', { method: 'POST', headers, body: JSON.stringify(payload) })
+  const r = await fetch(apiUrl('/v1/simulate'), { method: 'POST', headers, body: JSON.stringify(payload) })
   const data = await r.json()
   if (r.ok) store.lastSubmission = data
   return { status: r.status, ...data }
@@ -104,10 +131,16 @@ async function runLoop() {
       workflow: snapshot(),
       messages: apiMessages.value,
     }
-    const r = await fetch('/v1/chat', {
+    const r = await fetch(apiUrl('/v1/chat'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     const data = await r.json()
+    if (!r.ok) {
+      // e.g. 429 rate-limit / daily cap — surface the backend's message.
+      const msg = data?.detail || `request failed (${r.status})`
+      apiMessages.value.push({ role: 'assistant', content: [{ type: 'text', text: `⚠ ${msg}` }] })
+      return
+    }
     const blocks = data.content || []
     apiMessages.value.push({ role: 'assistant', content: blocks })
 
@@ -133,7 +166,7 @@ const placeholder = computed(() =>
 <template>
   <div class="cp">
     <button v-if="!open" class="cp-fab" @click="open = true" title="ColliderML copilot">
-      <span class="cp-fab-dot" :class="configured ? 'on' : 'off'" />
+      <span class="cp-fab-dot" :class="dotClass" />
       💬 Copilot
     </button>
 
@@ -146,7 +179,7 @@ const placeholder = computed(() =>
       </div>
 
       <div class="cp-sub">
-        <span class="cp-fab-dot" :class="configured ? 'on' : 'off'" />
+        <span class="cp-fab-dot" :class="dotClass" />
         <span>{{ providerLabel }}</span>
       </div>
 
@@ -177,7 +210,9 @@ const placeholder = computed(() =>
 .cp-fab:hover { border-color: var(--vp-c-brand-1); }
 .cp-fab-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .cp-fab-dot.on { background: #10b981; }
-.cp-fab-dot.off { background: #f59e0b; }
+.cp-fab-dot.off { background: #ef4444; }
+.cp-fab-dot.waking { background: #f59e0b; animation: cp-pulse 1s ease-in-out infinite; }
+@keyframes cp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 .cp-panel { width: 380px; max-width: calc(100vw - 40px); height: 540px; max-height: calc(100vh - 40px); display: flex; flex-direction: column; border: 1px solid var(--vp-c-divider); border-radius: 14px; background: var(--vp-c-bg); box-shadow: 0 8px 30px rgba(0,0,0,0.25); overflow: hidden; }
 .cp-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--vp-c-divider); }
 .cp-mode { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--vp-c-bg-soft); color: var(--vp-c-text-2); }

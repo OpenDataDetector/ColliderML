@@ -5,6 +5,7 @@ import {
   addStage, removeStage, moveStage, validate, presetWorkflow, resetWorkflow,
   toSimulatePayload, type StageType,
 } from '../composables/workflow'
+import { apiUrl } from '../composables/api'
 
 const addType = ref<StageType>('geometry')
 const issues = computed(() => validate())
@@ -24,7 +25,7 @@ async function submit() {
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (store.hfToken) headers['Authorization'] = `Bearer ${store.hfToken}`
-    const r = await fetch('/v1/simulate', { method: 'POST', headers, body: JSON.stringify(payload) })
+    const r = await fetch(apiUrl('/v1/simulate'), { method: 'POST', headers, body: JSON.stringify(payload) })
     const data = await r.json()
     if (!r.ok) {
       submitMsg.value = `❌ ${r.status}: ${data.detail || JSON.stringify(data)}`

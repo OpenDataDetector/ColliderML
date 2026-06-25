@@ -36,6 +36,9 @@ jobs:
       - name: Build docs
         env:
           VITEPRESS_BASE: ${{ steps.base.outputs.base }}
+          # Static site has no dev proxy, so the bundle must call the backend's
+          # absolute URL (used by the copilot + workflow builder). Public URL.
+          VITE_COLLIDERML_BACKEND: https://colliderml-backend.onrender.com
         run: npm run --prefix docs docs:build
 
       - name: Deploy to GitHub Pages

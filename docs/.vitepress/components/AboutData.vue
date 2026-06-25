@@ -77,12 +77,14 @@ onMounted(() => {
 .section-content {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.5s ease-in-out;
+  transition: max-height 0.6s ease-in-out;
   opacity: 0;
 }
 
 .section-content.expanded {
-  max-height: 2000px; /* Adjust based on content */
+  /* Large enough to fit the intro + detector renders + the event-display embed
+     without clipping. */
+  max-height: 6000px;
   opacity: 1;
 }
 </style> 
