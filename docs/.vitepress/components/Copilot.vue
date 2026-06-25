@@ -141,7 +141,14 @@ async function runLoop() {
       apiMessages.value.push({ role: 'assistant', content: [{ type: 'text', text: `⚠ ${msg}` }] })
       return
     }
-    const blocks = data.content || []
+    // Keep only the fields valid for each block type. The backend returns blocks
+    // with all fields populated (text blocks carry id/name/input = null); echoing
+    // those back into the next turn makes Anthropic reject "extra inputs".
+    const blocks = (data.content || []).map((b: any) => {
+      if (b.type === 'tool_use') return { type: 'tool_use', id: b.id, name: b.name, input: b.input ?? {} }
+      if (b.type === 'text') return { type: 'text', text: b.text ?? '' }
+      return b
+    })
     apiMessages.value.push({ role: 'assistant', content: blocks })
 
     const toolUses = blocks.filter((b: any) => b.type === 'tool_use')
