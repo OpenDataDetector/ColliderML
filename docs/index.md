@@ -8,6 +8,28 @@ The ColliderML dataset is the largest-yet source of full-detail simulation in a 
 
 The ColliderML dataset provides comprehensive simulation data for machine learning applications in high-energy physics, with detailed detector responses and physics object reconstructions.
 
+### The Open Data Detector
+
+The simulation uses the **Open Data Detector (ODD)** — a realistic HL-LHC-class
+detector: a silicon tracker at the core, electromagnetic and hadronic
+calorimeters, and a muon system.
+
+![The full Open Data Detector in cutaway](/detector/detector-full.jpg)
+
+![The ODD silicon tracker](/detector/detector-tracker.jpg)
+
+![The ODD calorimeter and solenoid in cross-section](/detector/detector-calo.jpg)
+
+### Explore a real event
+
+A genuine simulated **ttbar** event — reconstructed tracks, calorimeter energy
+deposits, raw tracker hits, and clustered jets — rendered live in your browser.
+Drag to orbit, scroll to zoom.
+
+<EventDisplay />
+
+See more on the [detector & events page](/visualize).
+
 </AboutData>
 
 ::: tip New to the platform?

@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>hep-viz: 3D Event Visualizer</title>
+    <style>
+        /* --- Global Styles --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif;
+            margin: 0;
+            background-color: #111;
+            color: #eee;
+            overflow: hidden;
+            /* Hide scrollbars */
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* --- UI Container & Layout --- */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            max-width: 280px;
+            max-height: 90vh;
+            overflow-y: auto;
+            /* Scroll if menu gets too tall */
+        }
+
+        h2,
+        h3 {
+            margin: 0 0 10px 0;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #444;
+        }
+
+        h3 {
+            font-size: 1.1em;
+            margin-top: 15px;
+        }
+
+        /* --- Controls & Inputs --- */
+        button {
+            font-size: 16px;
+            padding: 8px 15px;
+            margin: 0 5px;
+            border-radius: 8px;
+            border: 1px solid #666;
+            background-color: #333;
+            color: #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #555;
+        }
+
+        button:disabled {
+            background-color: #222;
+            color: #555;
+            cursor: not-allowed;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin-top: 2px;
+            margin-bottom: 8px;
+        }
+
+        select {
+            width: 100%;
+            padding: 4px;
+            background: #333;
+            color: #eee;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+
+        label {
+            display: block;
+            margin: 5px 0;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        /* --- UI Sections --- */
+        .ui-section {
+            margin-top: 15px;
+            border-top: 1px solid #444;
+            padding-top: 10px;
+        }
+
+        .ui-section h4 {
+            margin: 0 0 8px 0;
+            display: flex;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+
+        .ui-section h4:hover {
+            color: #fff;
+        }
+
+        #toggle-menu-btn {
+            float: right;
+            font-size: 20px;
+            font-weight: bold;
+            font-family: monospace;
+            background: transparent;
+            border: none;
+            color: #eee;
+            cursor: pointer;
+            padding: 0 8px;
+            margin-top: -4px;
+            border-radius: 5px;
+        }
+
+        #toggle-menu-btn:hover {
+            background: transparent;
+        }
+
+        #ui-container.minimized #ui-content {
+            display: none;
+        }
+
+        .config-content {
+            display: none;
+            padding-left: 5px;
+        }
+
+        .config-content.open {
+            display: block;
+        }
+
+        .toggle-icon {
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* --- Overlays & Popups --- */
+        #info-box {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* --- Track Popup --- */
+        #track-popup {
+            display: none;
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #00ff00;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            color: #eee;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            width: 250px;
+            font-size: 13px;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+        }
+
+        .calo-list {
+            display: none;
+            margin-top: 5px;
+            border-top: 1px solid #555;
+            padding-top: 5px;
+        }
+
+        .calo-list.open {
+            display: block;
+        }
+
+        .toggle-btn {
+            cursor: pointer;
+            color: #3498db;
+            text-decoration: underline;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner"></div>
+        <h2 id="loading-text">Loading Event...</h2>
+    </div>
+
+    <div id="track-popup"></div>
+    <div id="canvas-container"></div>
+
+    <div id="ui-container">
+        <h2>hep-viz <button id="toggle-menu-btn">[–]</button></h2>
+
+        <div id="ui-content">
+            <div
+                style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; background: #222; padding: 8px; border-radius: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-weight: bold; margin-right: 4px;">Event:</span>
+                    <input type="text" id="event-input" placeholder="ID"
+                        style="padding: 4px; border-radius: 4px; background: #444; color: #eee; border: 1px solid #666; width: 60px;">
+                    <div style="display: flex; gap: 4px;">
+                        <button id="go-btn"
+                            style="padding: 4px 8px; cursor: pointer; background: #2980b9; border: 1px solid #3498db;">Go</button>
+                        <button id="prev-btn" disabled style="padding: 4px 10px; cursor: pointer;">&lt;</button>
+                        <button id="next-btn" disabled style="padding: 4px 10px; cursor: pointer;">&gt;</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hidden text display, kept for fallback logic but hidden -->
+            <span id="event-display" style="display: none;">Event: -</span>
+
+            <!-- Track Source Selection -->
+            <div id="track-source-container" style="margin-bottom: 15px; display: block;">
+                <label for="track-source-select"
+                    style="font-size: 14px; color: #ccc; margin-bottom: 5px; display: block;">Reco Algorithm:</label>
+                <select id="track-source-select"
+                    style="width: 100%; padding: 6px; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px;">
+                    <!-- Populated via JS -->
+                </select>
+            </div>
+
+            <h3 id="track-count">Tracks: 0</h3>
+            <div id="reco-track-count" style="font-size: 12px; color: #aaa; margin-bottom: 10px;">Reco Tracks: 0</div>
+            <h3 id="calo-count">Calo Hits: 0</h3>
+            <h3 id="raw-hit-count">Raw Hits: 0</h3>
+
+            <div class="ui-section">
+                <h4>Display Options</h4>
+                <label id="lbl-tracks"><input type="checkbox" id="show-tracks-check" checked> Show Tracks</label>
+                <label id="lbl-grey-reco"><input type="checkbox" id="grey-reco-check" checked> Grey out non-reco
+                    tracks</label>
+                <label id="lbl-calo"><input type="checkbox" id="show-calo-check" checked> Show Calorimeter</label>
+                <label id="lbl-raw"><input type="checkbox" id="show-raw-hits-check"> Show Raw Hits</label>
+
+                <div id="jet-ui-container" style="margin-top: 5px; border-top: 1px dashed #555; padding-top: 5px;">
+                    <label id="lbl-jets"><input type="checkbox" id="show-jets-check"> Show Jets</label>
+                    <div id="jet-config" style="margin-left: 20px;">
+                        <label style="font-size: 12px; display: inline-block;">Source:</label>
+                        <select id="jet-source-select" style="width: 100px; font-size: 12px; padding: 2px;">
+                            <option value="truth">Truth</option>
+                            <option value="reco">Reco</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ui-section">
+                <h4>Filters</h4>
+                <label for="pt-slider">pT Cut: <span id="pt-value">0.5</span> GeV</label>
+                <input type="range" id="pt-slider" min="0" max="10" step="0.1" value="0.5">
+
+                <div id="pdg-container">
+                    <label for="pdg-id-select" style="margin-top: 5px;">PDG ID:</label>
+                    <select id="pdg-id-select">
+                        <option value="all">All Particles</option>
+                    </select>
+                </div>
+
+                <div id="volume-container" class="hidden" style="margin-top: 10px;">
+                    <label style="font-weight: bold;">Volumes:</label>
+                    <label><input type="checkbox" id="vol-select-all" checked> Select All</label>
+                    <div id="volume-list"
+                        style="max-height: 100px; overflow-y: auto; border: 1px solid #444; padding: 5px; margin-top: 5px;">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="ui-section">
+                <h4 id="config-header">Plot Configuration <span id="config-icon" class="toggle-icon">[+]</span></h4>
+
+                <div id="config-content" class="config-content">
+                    <label>Track Thickness: <span id="val-thick">3</span></label>
+                    <input type="range" id="cfg-thickness" min="1" max="10" step="0.5" value="3">
+
+                    <div id="calo-controls-container">
+                        <label id="lbl-cfg-calo">Calo Scale: <span id="val-calo">5000</span></label>
+                        <input type="range" id="cfg-calo" min="100" max="20000" step="100" value="5000">
+
+                        <label id="lbl-cfg-calo-mode" style="margin-top: 5px;">Calo Scale Mode:</label>
+                        <select id="cfg-calo-mode"
+                            style="width: 100%; margin-bottom: 10px; background: #333; color: #eee; border: 1px solid #555; padding: 2px;">
+                            <option value="log">Logarithmic</option>
+                            <option value="linear">Linear</option>
+                        </select>
+                    </div>
+
+                    <label id="radius-label">Hit Radius: <span id="val-radius">8</span></label>
+                    <input type="range" id="cfg-radius" min="1" max="20" step="0.5" value="8">
+
+                    <label style="margin-top: 10px; cursor: pointer;">
+                        <input type="checkbox" id="cfg-grid-axes" checked> Show Grid & Axes
+                    </label>
+                </div>
+            </div>
+
+            <button id="exit-btn"
+                style="background: #c0392b; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; width: 100%; margin-top: 10px;">Exit
+                hep-viz</button>
+        </div>
+    </div>
+
+    <div id="info-box">
+        Use Mouse: Rotate (Left Click + Drag) | Zoom (Scroll) | Pan (Right Click + Drag) || (X=Red, Y=Green, Z=Blue)
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // --- Global Variables ---
+        let scene, camera, renderer, controls, axesHelper, gridHelper;
+        let eventData = {};
+        let currentEventIndex = 0;
+        let availableEvents = [];
+        let availableTrackSources = [];
+        let currentTrackSource = "tracks";
+
+        let tracksGroup = new THREE.Group();
+        let caloGroup = new THREE.Group();
+        let rawHitsGroup = new THREE.Group();
+        let jetsGroup = new THREE.Group();
+
+        const colors = [
+            0x4287f5, 0xf54242, 0x42f56a, 0xf5a442, 0xa442f5,
+            0xf542d4, 0x42f5f2, 0xf5e942, 0x9ef542, 0x42f599,
+            0x1a73e8, 0xd93025, 0x1e8e3e, 0xf29900, 0x8f00ff,
+            0x00bcd4, 0xffeb3b, 0x8bc34a, 0xff9800, 0x9c27b0
+        ];
+
+        // --- Config Defaults ---
+        let TRACK_THICKNESS = 3;        // Default thickness
+        let CALO_ENERGY_SCALE = 5000;   // Default calo scale
+        let RAW_HIT_RADIUS = 8;         // Default hit radius
+
+        // --- Geometries ---
+        const caloGeometry = new THREE.BoxGeometry(40, 40, 40);
+        const rawHitGeometry = new THREE.SphereGeometry(1, 8, 6);
+
+        // --- DOM Elements ---
+        const eventDisplay = document.getElementById('event-display');
+        const trackCountDisplay = document.getElementById('track-count');
+        const recoTrackCountDisplay = document.getElementById('reco-track-count');
+        const caloCountDisplay = document.getElementById('calo-count');
+        const rawHitCountDisplay = document.getElementById('raw-hit-count');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const showTracksCheck = document.getElementById('show-tracks-check');
+        const greyRecoCheck = document.getElementById('grey-reco-check');
+        const showCaloCheck = document.getElementById('show-calo-check');
+        const showRawHitsCheck = document.getElementById('show-raw-hits-check');
+        const showJetsCheck = document.getElementById('show-jets-check');
+        const jetSourceSelect = document.getElementById('jet-source-select');
+        const ptSlider = document.getElementById('pt-slider');
+        const ptValueDisplay = document.getElementById('pt-value');
+        const pdgIdSelect = document.getElementById('pdg-id-select');
+        const trackSourceSelect = document.getElementById('track-source-select');
+        const trackSourceContainer = document.getElementById('track-source-container');
+        const uiContainer = document.getElementById('ui-container');
+        const toggleMenuBtn = document.getElementById('toggle-menu-btn');
+        const configHeader = document.getElementById('config-header');
+        const configContent = document.getElementById('config-content');
+        const configIcon = document.getElementById('config-icon');
+        const cfgThickness = document.getElementById('cfg-thickness');
+        const cfgCalo = document.getElementById('cfg-calo');
+        const cfgRadius = document.getElementById('cfg-radius');
+        const valThick = document.getElementById('val-thick');
+        const valCalo = document.getElementById('val-calo');
+        const valRadius = document.getElementById('val-radius');
+        const lblCalo = document.getElementById('lbl-calo');
+        const lblCfgCalo = document.getElementById('lbl-cfg-calo');
+        const pdgContainer = document.getElementById('pdg-container');
+
+        // --- Raycaster ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        raycaster.params.Line.threshold = 0.5;
+
+        // --- Initialization ---
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 50000);
+            camera.position.set(2000, 2000, 2000);
+
+            const container = document.getElementById('canvas-container');
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setClearColor(0x111111);
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            // Helpers
+            axesHelper = new THREE.AxesHelper(5000);
+            scene.add(axesHelper);
+
+            gridHelper = new THREE.GridHelper(10000, 20, 0x555555, 0x333333);
+            scene.add(gridHelper);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(1, 1, 0.5);
+            scene.add(dirLight);
+
+            scene.add(tracksGroup);
+            scene.add(caloGroup);
+            scene.add(rawHitsGroup);
+            scene.add(jetsGroup);
+
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Data Fetching ---
+        async function fetchEventList() {
+            try {
+                const response = await fetch('./events.json');
+                if (!response.ok) throw new Error('Failed to fetch event list');
+                const data = await response.json();
+                availableEvents = data.events;
+
+                // Handle Track Sources
+                if (data.track_sources && data.track_sources.length > 0) {
+                    availableTrackSources = data.track_sources;
+                    trackSourceContainer.style.display = 'block';
+                    trackSourceSelect.innerHTML = '';
+                    availableTrackSources.forEach(src => {
+                        const opt = document.createElement('option');
+                        opt.value = src;
+                        opt.innerText = src;
+                        trackSourceSelect.appendChild(opt);
+                    });
+                    currentTrackSource = availableTrackSources[0]; // Default to first
+                } else {
+                    trackSourceContainer.style.display = 'none';
+                    currentTrackSource = 'tracks'; // Fallback
+                }
+
+                // Initial UI setup
+                const eventInput = document.getElementById('event-input');
+                if (availableEvents.length > 0) {
+                    eventInput.value = availableEvents[0];
+                    currentEventIndex = 0;
+                    loadEvent(availableEvents[currentEventIndex]);
+                } else {
+                    eventDisplay.innerText = "No Events Found";
+                }
+            } catch (error) {
+                console.error(error);
+                eventDisplay.innerText = "Error connecting to server";
+            }
+        }
+
+        async function loadEvent(eventId) {
+            try {
+                const response = await fetch(`./events/event_${eventId}.json`);
+                if (!response.ok) throw new Error(`Failed to load event ${eventId}`);
+                eventData = await response.json();
+
+                // Update UI based on metadata
+                if (eventData.metadata) {
+                    if (!eventData.metadata.has_calo) {
+                        lblCalo.classList.add('hidden');
+                        lblCfgCalo.classList.add('hidden');
+                        cfgCalo.classList.add('hidden');
+                        showCaloCheck.checked = false;
+                    } else {
+                        lblCalo.classList.remove('hidden');
+                        lblCfgCalo.classList.remove('hidden');
+                        cfgCalo.classList.remove('hidden');
+                        showCaloCheck.checked = true;
+                    }
+
+                    if (!eventData.metadata.has_pdg) {
+                        pdgContainer.classList.add('hidden');
+                    } else {
+                        pdgContainer.classList.remove('hidden');
+                    }
+
+                    // Volume Metadata
+                    const volContainer = document.getElementById('volume-container');
+                    if (eventData.metadata.has_volumes) {
+                        volContainer.classList.remove('hidden');
+                        populateVolumeList();
+                    } else {
+                        volContainer.classList.add('hidden');
+                    }
+                }
+
+                populatePdgDropdown();
+                drawEvent();
+                updateUI();
+            } catch (error) {
+                console.error(error);
+                alert(error.message);
+                eventDisplay.innerText = "Error loading data.";
+            }
+        }
+
+        // --- UI Population Helpers ---
+        function populateVolumeList() {
+            const volList = document.getElementById('volume-list');
+            volList.innerHTML = '';
+            const volumes = new Set();
+
+            if (eventData.all_tracker_hits) {
+                eventData.all_tracker_hits.forEach(h => {
+                    if (h.volume_id !== undefined) volumes.add(h.volume_id);
+                });
+            }
+
+            const sortedVols = Array.from(volumes).sort((a, b) => a - b);
+            sortedVols.forEach(vol => {
+                const div = document.createElement('div');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'vol-checkbox';
+                cb.value = vol;
+                cb.checked = true;
+                cb.addEventListener('change', () => drawEvent());
+
+                const lbl = document.createElement('label');
+                lbl.innerText = ` Vol ${vol}`;
+                lbl.prepend(cb);
+                div.appendChild(lbl);
+                volList.appendChild(div);
+            });
+        }
+
+        function populatePdgDropdown() {
+            const allPdgIds = new Set();
+            if (eventData.tracks) eventData.tracks.forEach(t => allPdgIds.add(t.pdg_id));
+            if (eventData.calo_hits) eventData.calo_hits.forEach(c => allPdgIds.add(c.pdg_id));
+            if (eventData.all_tracker_hits) eventData.all_tracker_hits.forEach(h => allPdgIds.add(h.pdg_id));
+
+            const sorted = Array.from(allPdgIds).sort((a, b) => a - b);
+            pdgIdSelect.innerHTML = '<option value="all">All Particles</option>';
+            sorted.forEach(id => {
+                const opt = document.createElement('option');
+                opt.value = id; opt.innerText = id;
+                pdgIdSelect.appendChild(opt);
+            });
+        }
+
+        // --- Main Drawing Function ---
+        function drawEvent() {
+            const ptCut = parseFloat(ptSlider.value);
+            const selectedPdgId = pdgIdSelect.value === 'all' ? null : parseInt(pdgIdSelect.value);
+            const showTracks = showTracksCheck.checked;
+            const greyNonReco = greyRecoCheck.checked;
+            const showCalo = showCaloCheck.checked;
+            const showRawHits = showRawHitsCheck.checked;
+            const showJets = showJetsCheck.checked;
+            const jetSource = jetSourceSelect.value;
+
+            // Get selected volumes
+            const selectedVolumes = new Set();
+            document.querySelectorAll('.vol-checkbox:checked').forEach(cb => selectedVolumes.add(parseInt(cb.value)));
+            const hasVolumeFilter = !document.getElementById('volume-container').classList.contains('hidden');
+
+            clearGroup(tracksGroup);
+            clearGroup(caloGroup);
+            clearGroup(rawHitsGroup);
+            clearGroup(jetsGroup);
+
+            if (!eventData.tracks) { // Safety check
+                trackCountDisplay.innerText = "Tracks: 0";
+                caloCountDisplay.innerText = "Calo Hits: 0";
+                rawHitCountDisplay.innerText = "Raw Hits: 0";
+                return;
+            }
+
+            const filterFunction = (item) => {
+                // PT & PDG Filter
+                if (item.pT < ptCut) return false;
+                if (selectedPdgId !== null && item.pdg_id !== selectedPdgId) return false;
+
+                // Volume Filter (Only for items with volume_id, usually raw hits)
+                if (hasVolumeFilter && item.volume_id !== undefined) {
+                    if (!selectedVolumes.has(item.volume_id)) return false;
+                }
+                return true;
+            };
+
+            const fTracks = eventData.tracks ? eventData.tracks.filter(filterFunction) : [];
+            const fCalo = eventData.calo_hits ? eventData.calo_hits.filter(filterFunction) : [];
+            const fRawHits = eventData.all_tracker_hits ? eventData.all_tracker_hits.filter(filterFunction) : [];
+
+            trackCountDisplay.innerText = `Tracks: ${fTracks.length} / ${eventData.tracks ? eventData.tracks.length : 0}`;
+
+            // Calculate Reco Tracks
+            const recoTracks = fTracks.filter(t => t.reco_info && t.reco_info.has_reco);
+            recoTrackCountDisplay.innerText = `Reco Tracks: ${recoTracks.length}`;
+
+            caloCountDisplay.innerText = `Calo Hits: ${fCalo.length} / ${eventData.calo_hits ? eventData.calo_hits.length : 0}`;
+            rawHitCountDisplay.innerText = `Raw Hits: ${fRawHits.length} / ${eventData.all_tracker_hits ? eventData.all_tracker_hits.length : 0}`;
+
+            const uniqueParticleIds = new Set();
+            fTracks.forEach(t => uniqueParticleIds.add(t.particle_id));
+            fCalo.forEach(c => uniqueParticleIds.add(c.particle_id));
+            fRawHits.forEach(h => uniqueParticleIds.add(h.particle_id));
+
+            // Set of particle IDs that have a reconstructed track
+            const recoParticleIds = new Set(recoTracks.map(t => t.particle_id));
+
+            const particleColorMap = new Map();
+            let colorIndex = 0;
+            const getColor = (particleId) => {
+                if (!particleColorMap.has(particleId)) {
+                    particleColorMap.set(particleId, colors[colorIndex % colors.length]);
+                    colorIndex++;
+                }
+                return particleColorMap.get(particleId);
+            };
+            uniqueParticleIds.forEach(id => getColor(id));
+
+            // Helper function for drawing track segments
+            const drawTrackSegment = (points, particleId) => {
+                const curve = new THREE.CatmullRomCurve3(points);
+                // Adjust segments based on length to avoid artifacts
+                const segments = Math.max(4, points.length * 6);
+                const geometry = new THREE.TubeGeometry(curve, segments, TRACK_THICKNESS, 8, false);
+
+                // Determine color: Grey if no reco, else particle color
+                const originalTrack = fTracks.find(t => t.particle_id === particleId);
+                let color = getColor(particleId); // Default to particle color
+
+                if (greyNonReco) {
+                    // If toggle is ON, check if we should grey it out
+                    if (originalTrack && (!originalTrack.reco_info || !originalTrack.reco_info.has_reco)) {
+                        color = 0x888888;
+                    }
+                }
+
+                const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: color }));
+
+                // Attach track data for raycasting
+                if (originalTrack) {
+                    mesh.userData = { track: originalTrack };
+                }
+                tracksGroup.add(mesh);
+            };
+
+            // Draw Tracks
+            if (showTracks) {
+                fTracks.forEach((track) => {
+                    // Volume logic
+                    if (hasVolumeFilter && track.points.length > 0 && track.points[0].volume_id !== undefined) {
+                        let currentSegment = [];
+                        for (let i = 0; i < track.points.length; i++) {
+                            const p = track.points[i];
+                            if (selectedVolumes.has(p.volume_id)) {
+                                currentSegment.push(new THREE.Vector3(p.x, p.y, p.z));
+                            } else {
+                                if (currentSegment.length >= 2) {
+                                    drawTrackSegment(currentSegment, track.particle_id);
+                                }
+                                currentSegment = [];
+                            }
+                        }
+                        if (currentSegment.length >= 2) {
+                            drawTrackSegment(currentSegment, track.particle_id);
+                        }
+                    } else {
+                        // Draw full track
+                        const points = track.points.map(p => new THREE.Vector3(p.x, p.y, p.z));
+                        if (points.length >= 2) {
+                            drawTrackSegment(points, track.particle_id);
+                        }
+                    }
+                });
+            }
+
+            // Draw Calo Hits
+            if (showCalo) {
+                const scaleMode = document.getElementById('cfg-calo-mode').value;
+                fCalo.forEach((hit) => {
+                    let color = getColor(hit.particle_id);
+                    if (greyNonReco) {
+                        if (!recoParticleIds.has(hit.particle_id)) {
+                            color = 0x888888;
+                        }
+                    }
+
+                    const mat = new THREE.MeshBasicMaterial({ color: color, opacity: 0.7, transparent: true });
+                    const mesh = new THREE.Mesh(caloGeometry, mat);
+                    mesh.position.set(hit.x, hit.y, hit.z);
+
+                    let scale;
+                    if (scaleMode === 'linear') {
+                        scale = Math.max(0.1, hit.energy * (CALO_ENERGY_SCALE / 50.0));
+                    } else {
+                        scale = Math.max(0.1, Math.log10(1 + hit.energy * CALO_ENERGY_SCALE));
+                    }
+                    mesh.scale.set(scale, scale, scale);
+                    mesh.userData = { caloHit: hit };
+                    caloGroup.add(mesh);
+                });
+            }
+
+            // Draw Raw Tracker Hits
+            if (showRawHits) {
+                fRawHits.forEach(hit => {
+                    const mesh = new THREE.Mesh(rawHitGeometry, new THREE.MeshBasicMaterial({ color: getColor(hit.particle_id) }));
+                    mesh.position.set(hit.x, hit.y, hit.z);
+                    mesh.scale.set(RAW_HIT_RADIUS, RAW_HIT_RADIUS, RAW_HIT_RADIUS);
+                    rawHitsGroup.add(mesh);
+                });
+            }
+
+            // Draw Jets
+            if (showJets && eventData.jets) {
+                const jets = eventData.jets[jetSource] || [];
+                // Use event vertex as origin (default 0,0,0)
+                const v = eventData.vertex || [0, 0, 0];
+                const startPos = new THREE.Vector3(v[0], v[1], v[2]);
+                const JET_START_OFFSET = 0; // Relative to vertex
+
+                jets.forEach(jet => {
+                    // Kinematics
+                    const pt = jet.pt;
+                    const eta = jet.eta;
+                    const phi = jet.phi;
+                    const energy = jet.energy;
+
+                    // Direction
+                    const theta = 2 * Math.atan(Math.exp(-eta));
+                    const vx = Math.cos(phi) * Math.sin(theta);
+                    const vy = Math.sin(phi) * Math.sin(theta);
+                    const vz = Math.cos(theta);
+                    const dir = new THREE.Vector3(vx, vy, vz).normalize();
+
+                    // Visual Properties
+                    // Length: Use max_extent (furthest hit) if available.
+                    // Fallback to log scale for Truth jets or if missing.
+                    let length;
+                    if (jet.max_extent && jet.max_extent > 0) {
+                        length = jet.max_extent;
+                    } else {
+                        // Heuristic for Truth Jets or missing extent
+                        // Boosted to be more visible/longer as requested
+                        length = Math.max(200, Math.log(1 + energy) * 500);
+                    }
+
+                    // Radius: Open angle corresponding to Jet Radius R.
+                    // Physics R=0.4 is standard, but visually this creates huge cones when extended.
+                    // Reduced to R=0.2 (approx 11 deg) for cleaner "CERN-style" visualization.
+                    const radius = length * Math.tan(0.2);
+
+                    // Geometry (Tip at +Y, Base at -Y)
+                    const geometry = new THREE.ConeGeometry(radius, length, 32, 1, true);
+
+                    const color = jetSource === 'truth' ? 0xffaa00 : 0x00aaff;
+                    const material = new THREE.MeshBasicMaterial({
+                        color: color,
+                        opacity: 0.5,
+                        transparent: true,
+                        side: THREE.DoubleSide,
+                        depthWrite: false
+                    });
+
+                    const mesh = new THREE.Mesh(geometry, material);
+
+                    // Orientation: 
+                    // ConeGeometry has Tip at +Y, Base at -Y.
+                    // We want Tip at Origin (Start) and Base Outwards.
+                    // So we align +Y (Tip) to -dir (Inwards) OR -Y (Base) to +dir (Outwards).
+                    // Align (0, -1, 0) [Base direction in local space] to dir [Outwards in world space].
+                    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+
+                    // Position: 
+                    // Tip is at `startPos` + `JET_START_OFFSET` * dir.
+                    // Center is at Tip + dir * (length/2).
+                    // New Tip Pos = startPos.
+                    // Center = startPos + dir * (length/2). (Given JET_START_OFFSET=0)
+
+                    const centerPos = startPos.clone().add(dir.clone().multiplyScalar(JET_START_OFFSET + length / 2));
+                    mesh.position.copy(centerPos);
+
+                    mesh.userData = { jet: jet, type: jetSource };
+                    jetsGroup.add(mesh);
+                });
+            }
+        }
+
+        function clearGroup(group) {
+            while (group.children.length > 0) {
+                const obj = group.children[0];
+                group.remove(obj);
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) obj.material.dispose();
+            }
+        }
+
+        function updateUI() {
+            const eventId = availableEvents[currentEventIndex];
+            eventDisplay.innerText = `Event: ${eventId}`; // Fallback
+
+            // Update Input
+            const eventInput = document.getElementById('event-input');
+            eventInput.value = eventId;
+
+            prevBtn.disabled = (currentEventIndex === 0);
+            nextBtn.disabled = (currentEventIndex === availableEvents.length - 1);
+        }
+
+        // --- Event Listeners ---
+        prevBtn.addEventListener('click', () => {
+            if (currentEventIndex > 0) {
+                currentEventIndex--;
+                loadEvent(availableEvents[currentEventIndex]);
+            }
+        });
+        nextBtn.addEventListener('click', () => {
+            if (currentEventIndex < availableEvents.length - 1) {
+                currentEventIndex++;
+                loadEvent(availableEvents[currentEventIndex]);
+            }
+        });
+
+        const eventInput = document.getElementById('event-input');
+
+        function jumpToEvent() {
+            const val = eventInput.value;
+            let idx = availableEvents.indexOf(val);
+            if (idx === -1) idx = availableEvents.indexOf(parseInt(val));
+
+            if (idx !== -1) {
+                currentEventIndex = idx;
+                loadEvent(availableEvents[currentEventIndex]);
+            } else {
+                alert(`Event ${val} not found in available list.`);
+            }
+        }
+
+        eventInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') jumpToEvent();
+        });
+
+        document.getElementById('go-btn').addEventListener('click', jumpToEvent);
+
+        trackSourceSelect.addEventListener('change', (e) => {
+            currentTrackSource = e.target.value;
+            loadEvent(availableEvents[currentEventIndex]);
+        });
+
+        showTracksCheck.addEventListener('change', () => drawEvent());
+        greyRecoCheck.addEventListener('change', () => drawEvent());
+        showCaloCheck.addEventListener('change', () => drawEvent());
+        showRawHitsCheck.addEventListener('change', () => drawEvent());
+        showJetsCheck.addEventListener('change', () => drawEvent());
+        jetSourceSelect.addEventListener('change', () => drawEvent());
+
+        document.getElementById('vol-select-all').addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            document.querySelectorAll('.vol-checkbox').forEach(cb => {
+                cb.checked = checked;
+            });
+            drawEvent();
+        });
+
+        ptSlider.addEventListener('input', () => {
+            ptValueDisplay.innerText = parseFloat(ptSlider.value).toFixed(1);
+            drawEvent();
+        });
+
+        pdgIdSelect.addEventListener('change', () => drawEvent());
+
+        // Main Menu Minimizer
+        toggleMenuBtn.addEventListener('click', () => {
+            uiContainer.classList.toggle('minimized');
+            toggleMenuBtn.innerText = uiContainer.classList.contains('minimized') ? '[+]' : '[–]';
+        });
+
+        // Config Menu Collapser
+        configHeader.addEventListener('click', () => {
+            configContent.classList.toggle('open');
+            configIcon.innerText = configContent.classList.contains('open') ? '[–]' : '[+]';
+        });
+
+        // Config Input Listeners
+        cfgThickness.addEventListener('input', () => {
+            TRACK_THICKNESS = parseFloat(cfgThickness.value);
+            valThick.innerText = TRACK_THICKNESS;
+            drawEvent();
+        });
+
+        cfgCalo.addEventListener('input', () => {
+            CALO_ENERGY_SCALE = parseFloat(cfgCalo.value);
+            valCalo.innerText = CALO_ENERGY_SCALE;
+            drawEvent();
+        });
+
+        document.getElementById('cfg-calo-mode').addEventListener('change', () => drawEvent());
+
+        // --- Interactivity ---
+        window.addEventListener('mousemove', onMouseMove, false);
+
+        function onMouseMove(event) {
+            // Ignore if over UI
+            if (event.target.closest('#ui-container') || event.target.closest('#track-popup')) {
+                document.body.style.cursor = 'default';
+                return;
+            }
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // Check intersection with tracks AND calo hits AND jets
+            const objectsToTest = [...tracksGroup.children, ...caloGroup.children, ...jetsGroup.children];
+            const intersects = raycaster.intersectObjects(objectsToTest);
+
+            if (intersects.length > 0) {
+                document.body.style.cursor = 'pointer';
+            } else {
+                document.body.style.cursor = 'default';
+            }
+        }
+
+        window.addEventListener('click', onMouseClick, false);
+
+        function onMouseClick(event) {
+            if (event.target.closest('#ui-container') || event.target.closest('#track-popup')) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // Add jetsGroup to clickable objects
+            const objectsToTest = [...tracksGroup.children, ...caloGroup.children, ...jetsGroup.children];
+            const intersects = raycaster.intersectObjects(objectsToTest);
+
+            if (intersects.length > 0) {
+                const selectedMesh = intersects[0].object;
+                const color = selectedMesh.material.color;
+
+                if (selectedMesh.userData.track) {
+                    showPopup(event.clientX, event.clientY, selectedMesh.userData.track, 'track', color);
+                } else if (selectedMesh.userData.caloHit) {
+                    const hit = selectedMesh.userData.caloHit;
+                    let associatedTrack = null;
+                    if (eventData.tracks) {
+                        associatedTrack = eventData.tracks.find(t => t.particle_id === hit.particle_id);
+                    }
+
+                    if (associatedTrack) {
+                        showPopup(event.clientX, event.clientY, associatedTrack, 'track', color);
+                    } else {
+                        showPopup(event.clientX, event.clientY, hit, 'calo', color);
+                    }
+                } else if (selectedMesh.userData.jet) {
+                    showPopup(event.clientX, event.clientY, selectedMesh.userData.jet, 'jet', color);
+                }
+            } else {
+                hidePopup();
+            }
+        }
+
+        function showPopup(x, y, data, type, color) {
+            const popup = document.getElementById('track-popup');
+            let borderColor = '#00ff00'; // Fallback green
+
+            if (color) {
+                if (typeof color.getHexString === 'function') {
+                    borderColor = '#' + color.getHexString();
+                } else if (typeof color === 'number') {
+                    borderColor = '#' + new THREE.Color(color).getHexString();
+                } else if (typeof color === 'string') {
+                    borderColor = color;
+                }
+            }
+
+            popup.style.border = `1px solid ${borderColor}`;
+            popup.style.borderLeft = `4px solid ${borderColor}`;
+            popup.style.left = (x + 15) + 'px';
+            popup.style.top = (y + 15) + 'px';
+            popup.style.display = 'block';
+
+            let html = '';
+            if (type === 'track') {
+                let recoHtml = '<em>No Reco Track</em>';
+                if (data.reco_info && data.reco_info.has_reco) {
+                    recoHtml = `
+                        <strong>d0:</strong> ${data.reco_info.d0.toFixed(3)}<br>
+                        <strong>z0:</strong> ${data.reco_info.z0.toFixed(3)}<br>
+                        <strong>phi:</strong> ${data.reco_info.phi.toFixed(3)}<br>
+                        <strong>theta:</strong> ${data.reco_info.theta.toFixed(3)}<br>
+                        <strong>qop:</strong> ${data.reco_info.qop.toFixed(3)}
+                    `;
+                }
+
+                let caloHtml = `<strong>Calo Hits:</strong> ${data.calo_hits ? data.calo_hits.length : 0}`;
+                if (data.calo_hits && data.calo_hits.length > 0) {
+                    const totalE = data.calo_hits.reduce((sum, h) => sum + h.energy, 0);
+                    caloHtml += ` (Total E: ${totalE.toFixed(4)})<br>`;
+                    caloHtml += `<span class="toggle-btn" onclick="toggleCaloList()">[Show/Hide Details]</span>`;
+                    caloHtml += `<div id="popup-calo-list" class="calo-list">`;
+                    data.calo_hits.forEach(h => {
+                        caloHtml += `<div>E: ${h.energy.toFixed(4)} (${h.detector})</div>`;
+                    });
+                    caloHtml += `</div>`;
+                }
+
+                popup.innerHTML = `
+                    <div style="margin-bottom:8px; border-bottom:1px solid #555; padding-bottom:5px;">
+                        <strong>Particle ID:</strong> ${data.particle_id}<br>
+                        <strong>PDG:</strong> ${data.pdg_id}<br>
+                        <strong>Truth pT:</strong> ${data.pT.toFixed(2)}
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        ${recoHtml}
+                    </div>
+                    <div>
+                        ${caloHtml}
+                    </div>
+                `;
+            } else if (type === 'calo') {
+                popup.innerHTML = `
+                    <div style="margin-bottom:8px; border-bottom:1px solid #555; padding-bottom:5px;">
+                        <strong>Calorimeter Hit</strong>
+                    </div>
+                    <div>
+                        <strong>Energy:</strong> ${data.energy.toFixed(4)}<br>
+                        <strong>Position:</strong> (${data.x.toFixed(1)}, ${data.y.toFixed(1)}, ${data.z.toFixed(1)})<br>
+                        <strong>Particle ID:</strong> ${data.particle_id}<br>
+                        <strong>PDG:</strong> ${data.pdg_id}
+                    </div>
+                `;
+            } else if (type === 'jet') {
+                popup.innerHTML = `
+                    <div style="margin-bottom:8px; border-bottom:1px solid #555; padding-bottom:5px;">
+                        <strong>${data.type === 'truth' ? 'Truth' : 'Reco'} Jet</strong>
+                    </div>
+                    <div>
+                        <strong>pT:</strong> ${data.pt.toFixed(2)} GeV<br>
+                        <strong>Energy:</strong> ${data.energy.toFixed(2)} GeV<br>
+                        <strong>Eta:</strong> ${data.eta.toFixed(3)}<br>
+                        <strong>Phi:</strong> ${data.phi.toFixed(3)}<br>
+                        <strong>Constituents:</strong> ${data.n_constituents}
+                    </div>
+                `;
+            }
+        }
+
+        function hidePopup() {
+            document.getElementById('track-popup').style.display = 'none';
+        }
+
+        window.toggleCaloList = function () {
+            const el = document.getElementById('popup-calo-list');
+            if (el) el.classList.toggle('open');
+        }
+
+        // --- Loading Screen ---
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        function showLoading() {
+            loadingOverlay.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        const originalLoadEvent = loadEvent;
+        loadEvent = async function (eventId) {
+            showLoading();
+            setTimeout(async () => {
+                await originalLoadEvent(eventId);
+                hideLoading();
+            }, 50);
+        };
+
+        // --- Exit Button ---
+        document.getElementById('exit-btn').addEventListener('click', async () => {
+            if (confirm("Are you sure you want to exit the application?")) {
+                try {
+                    await Promise.resolve(); //fetch('/shutdown', { method: 'POST' });
+                    document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:#222;color:#fff;font-family:sans-serif;"><h1>Application Stopped. You can close this tab.</h1></div>';
+                } catch (e) {
+                    console.error("Error shutting down:", e);
+                }
+            }
+        });
+
+        // --- Grid & Axes Toggle ---
+        document.getElementById('cfg-grid-axes').addEventListener('change', (e) => {
+            const visible = e.target.checked;
+            if (gridHelper) gridHelper.visible = visible;
+            if (axesHelper) axesHelper.visible = visible;
+        });
+
+        // --- Start ---
+        init();
+        fetchEventList();
+
+    </script>
+</body>
+
+</html>

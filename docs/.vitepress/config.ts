@@ -24,6 +24,8 @@ const config = defineConfig({
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Library', link: '/library/overview' },
+      { text: 'Visualize', link: '/visualize' },
+      { text: 'Builder', link: '/builder' },
       { text: 'Spaces', link: '/spaces/overview' },
       { text: 'Appendices', link: '/appendices' }
     ],
@@ -90,6 +92,14 @@ const config = defineConfig({
   vite: {
     server: {
       proxy: {
+        // ColliderML SaaS backend (sim API + copilot /v1/chat). Proxied so the
+        // browser talks to one origin and the API key stays server-side.
+        // Defaults to the deployed Render backend; override with COLLIDERML_BACKEND
+        // (e.g. http://localhost:8000) to point at a local backend.
+        '/v1': {
+          target: process.env.COLLIDERML_BACKEND || 'https://colliderml-backend.onrender.com',
+          changeOrigin: true,
+        },
         '/nersc': {
           target: 'https://portal.nersc.gov/cfs/m4958/ColliderML',
           changeOrigin: true,

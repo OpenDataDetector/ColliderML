@@ -64,8 +64,11 @@ async function fetchSizeEstimates() {
 async function fetchAvailableDatasets() {
   try {
     console.log('[ColliderML] Fetching available configs from HuggingFace...')
+    // Use the datasets-server splits endpoint — it lists the ~48 configs in a
+    // few KB. The plain dataset API returns every parquet shard (~47k files,
+    // ~3.4 MB) which made the landing page slow.
     const response = await fetch(
-      'https://huggingface.co/api/datasets/CERN/ColliderML-Release-1'
+      'https://datasets-server.huggingface.co/splits?dataset=CERN/ColliderML-Release-1'
     )
 
     if (!response.ok) {
@@ -74,15 +77,9 @@ async function fetchAvailableDatasets() {
 
     const datasetInfo = await response.json()
 
-    // Parse available configs from the single consolidated dataset
-    // Config format: {process}_{pileup}_{object_type}
-    const configs = datasetInfo.siblings
-      ?.filter(s => s.rfilename.startsWith('data/'))
-      ?.map(s => {
-        // Extract config from path like: data/ttbar_pu0_particles/train-00000-of-00001.parquet
-        const match = s.rfilename.match(/data\/([^/]+)\//)
-        return match ? match[1] : null
-      })
+    // Each split entry has a `config` like {process}_{pileup}_{object_type}.
+    const configs = (datasetInfo.splits ?? [])
+      .map(s => s.config)
       .filter((c, i, arr) => c && arr.indexOf(c) === i) // unique configs
 
     console.log('[ColliderML] Found configs:', configs)
