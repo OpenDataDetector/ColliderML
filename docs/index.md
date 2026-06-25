@@ -28,6 +28,8 @@ Drag to orbit, scroll to zoom.
 
 <EventDisplay />
 
+Event display powered by [hep-viz](https://github.com/FinnbarWilson/hep-viz)
+(Wilson & Facini, UCL; [doi:10.5281/zenodo.18387794](https://doi.org/10.5281/zenodo.18387794)).
 See more on the [detector & events page](/visualize).
 
 </AboutData>

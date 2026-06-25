@@ -42,6 +42,22 @@ client-side over pre-exported events — no backend required. To explore the who
 dataset interactively, `pip install hep-viz` and run `hep-viz view <data-dir>`.
 :::
 
+## Citing hep-viz
+
+If you use the event display in your work, please cite hep-viz:
+
+```bibtex
+@software{hepviz,
+  author    = {Wilson, Finnbar and Facini, Gabriel},
+  title     = {hep-viz},
+  version   = {0.1.5},
+  publisher = {Zenodo},
+  year      = {2026},
+  doi       = {10.5281/zenodo.18387794},
+  url       = {https://doi.org/10.5281/zenodo.18387794}
+}
+```
+
 ::: info Credits
 Detector renders: the [Open Data Detector](https://github.com/OpenDataDetector/OpenDataDetector) project.
 :::
