@@ -1,0 +1,123 @@
+name: Pipeline Health
+
+# Runs the per-stage + end-to-end pipeline tests (tests/pipeline) as a
+# NON-BLOCKING red/green dashboard — red == the worklist, not a merge gate.
+# (The gating tests.yml excludes `-m pipeline`.)
+#
+#   hermetic job (PRs + nightly): stands up the backend via docker-compose
+#     (mock-SFAPI, ALLOW_TEST_TOKEN) and runs the hermetic + e2e tests.
+#   live job (nightly + manual): hits the deployed backend to catch drift
+#     (e.g. the /v1/leaderboard 500). No secrets needed.
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  hermetic:
+    runs-on: ubuntu-latest
+    continue-on-error: true          # dashboard, not a gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the backend (for docker-compose)
+        uses: actions/checkout@v4
+        with:
+          repository: OpenDataDetector/colliderml-production
+          ref: staging
+          path: colliderml-production
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install library
+        run: pip install -e ".[tasks,remote,dev]"
+
+      - name: Stand up backend (mock-SFAPI, test-auth seam)
+        working-directory: colliderml-production/backend
+        env:
+          ADMIN_TOKEN: dev-admin-token
+          ALLOW_TEST_TOKEN: "1"
+          AUTH_TEST_USER: ci-pipeline
+        run: docker compose up -d --build
+
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8000/healthz && break || sleep 2
+          done
+          curl -sf http://localhost:8000/healthz
+
+      - name: Run hermetic pipeline + e2e
+        continue-on-error: true
+        env:
+          COLLIDERML_BACKEND: http://localhost:8000
+          ADMIN_TOKEN: dev-admin-token
+          HF_TOKEN: ci-dummy-token     # accepted by the backend's ALLOW_TEST_TOKEN seam
+        run: |
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -p no:cacheprovider \
+            -m "pipeline and not live and not sim" tests/pipeline \
+            --junitxml=pipeline-hermetic.xml
+
+      - name: Publish hermetic dashboard
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Pipeline Health (hermetic)
+          path: pipeline-hermetic.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Backend logs
+        if: always()
+        working-directory: colliderml-production/backend
+        run: docker compose logs --no-color > backend.log 2>&1; docker compose down -v || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-hermetic
+          path: |
+            pipeline-hermetic.xml
+            colliderml-production/backend/backend.log
+
+  live:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'   # drift lane: nightly / manual only
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install library
+        run: pip install -e ".[tasks,remote,dev]"
+      - name: Run live drift lane
+        continue-on-error: true
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}    # auth'd live tests skip if empty
+        run: |
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -p no:cacheprovider \
+            -m "live" tests/pipeline --junitxml=pipeline-live.xml
+      - name: Publish live dashboard
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Pipeline Health (live)
+          path: pipeline-live.xml
+          reporter: java-junit
+          fail-on-error: false
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-live
+          path: pipeline-live.xml
