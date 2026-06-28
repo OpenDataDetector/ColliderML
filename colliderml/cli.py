@@ -326,7 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_bal.add_argument(
         "--backend-url",
         default=None,
-        help="Override the backend URL (default: $COLLIDERML_BACKEND or https://api.colliderml.com).",
+        help="Override the backend URL (default: $COLLIDERML_BACKEND or https://colliderml-backend.onrender.com).",
     )
     p_bal.add_argument(
         "--json",

@@ -106,26 +106,10 @@ CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
             config="digitization_config.yaml",
         ),
     ),
-    "single_muon": (
-        Stage(
-            name="Pythia Generation",
-            stage="pythia_generation",
-            script="simulation/pythia_gen.py",
-            config="pythia_config.yaml",
-        ),
-        Stage(
-            name="Detector Simulation",
-            stage="simulation",
-            script="simulation/ddsim_run.py",
-            config="simulation_config.yaml",
-        ),
-        Stage(
-            name="Digitization & Reconstruction",
-            stage="digitization",
-            script="simulation/digi_and_reco.py",
-            config="digitization_config.yaml",
-        ),
-    ),
+    # NOTE: `single_muon` is intentionally absent. Its preset was removed and it
+    # was mis-routed through Pythia generation (it needs an ACTS particle-gun
+    # stage, not a hard-process generator). Re-add it only with a correct
+    # particle-gun pipeline.
 }
 
 
