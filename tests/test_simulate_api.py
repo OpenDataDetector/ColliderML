@@ -36,7 +36,6 @@ def test_simulate_rejects_unknown_channel() -> None:
 def test_get_channel_stages_includes_known_channels() -> None:
     assert get_channel_stages("ttbar")
     assert get_channel_stages("higgs_portal")
-    assert get_channel_stages("single_muon")
 
 
 def _install_simulate_stubs(

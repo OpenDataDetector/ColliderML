@@ -18,7 +18,7 @@ from colliderml.remote._auth import auth_headers, require_hf_token
 #: Default backend URL. Overridable with ``$COLLIDERML_BACKEND`` or the
 #: ``backend_url=`` keyword on every client entry point.
 DEFAULT_BACKEND_URL = os.environ.get(
-    "COLLIDERML_BACKEND", "https://api.colliderml.com"
+    "COLLIDERML_BACKEND", "https://colliderml-backend.onrender.com"
 )
 
 #: Interval between poll cycles in :func:`wait_for`.
