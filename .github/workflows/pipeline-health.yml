@@ -104,7 +104,7 @@ jobs:
         continue-on-error: true
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}    # auth'd live tests skip if empty
-          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}  # for /admin/sfapi/health; test skips if empty
+          # (the SFAPI drift check needs no token — /v1/sfapi/health is public)
         run: |
           PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -v -p no:cacheprovider \
             -m "live" tests/pipeline --junitxml=pipeline-live.xml
