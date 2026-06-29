@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.4.2] - 2026-06-28
+
+### Fixed
+- [library] Default backend URL repointed from the dead `api.colliderml.com` (NXDOMAIN) to the live host, so out-of-the-box `colliderml.remote.*` / `colliderml.tasks.submit(...)` calls reach the SaaS backend. Override with `$COLLIDERML_BACKEND` as before.
+- [library] Removed the phantom `single_muon` simulation channel: it had no released dataset config and was mis-routed through Pythia generation (it needs an ACTS particle-gun stage). It now errors cleanly instead of silently running a wrong pipeline.
+
+### Changed
+- [library] `simulate` uses the native-Arrow OpenDataDetector v5.0.0 image and drops the separate parquet-conversion stage (digitization writes parquet directly).
+- [packaging] The `docs/` VitePress site is no longer bundled into the sdist (it had pulled ~5 MB of detector images / event JSON and a local `node_modules` into the source distribution).
+
 ## [0.4.1] - 2026-05-27
 
 ### Fixed
