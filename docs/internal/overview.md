@@ -24,6 +24,7 @@ They are written for platform operators and contributors — not for end users o
 - [Admin Dashboard](./admin.md) — Gradio admin Space, freeze/grant/ban/usage operations, kill switch
 - [Deployment](./deployment.md) — Render deploy, Docker Compose local dev, environment variables, database migrations
 - [Container Image](./container-image.md) — `OpenDataDetector/sw` image contents, build checklist, known issues
+- [Running production stages](./run-stage.md) — `run_stage.py` + the podman-hpc container run mechanism (interactive & SLURM)
 
 These pages are intentionally **excluded from the site navigation and search index**.
 They are reachable only by direct URL.
