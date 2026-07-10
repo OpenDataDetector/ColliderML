@@ -2,14 +2,27 @@ name: Deploy Docs
 
 on:
   push:
-    branches: [ main, staging ]
+    branches: [ main ]
   workflow_dispatch: {}
 
+# Least-privilege token for the official GitHub Pages deployment (no gh-pages
+# branch push). Replaces the peaceiris/legacy-branch-build flow, whose legacy
+# GitHub Pages build could hang in "building" and silently never publish new
+# pages (old pages kept serving from the last good build).
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two Pages deploys at once; let an in-flight deploy finish rather
+# than cancel it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
-  build-deploy:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Required to push to gh-pages branch
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,33 +32,29 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Compute base path
-        id: base
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "base=/ColliderML/" >> $GITHUB_OUTPUT
-            echo "dest=." >> $GITHUB_OUTPUT
-          else
-            echo "base=/ColliderML/staging/" >> $GITHUB_OUTPUT
-            echo "dest=staging" >> $GITHUB_OUTPUT
-          fi
-
       - name: Install docs dependencies
         run: npm ci --prefix docs
 
       - name: Build docs
         env:
-          VITEPRESS_BASE: ${{ steps.base.outputs.base }}
+          VITEPRESS_BASE: /ColliderML/
           # Static site has no dev proxy, so the bundle must call the backend's
-          # absolute URL (used by the copilot + workflow builder). Public URL.
+          # absolute URL (copilot + workflow builder). Public URL.
           VITE_COLLIDERML_BACKEND: https://colliderml-backend.onrender.com
         run: npm run --prefix docs docs:build
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/.vitepress/dist
-          publish_branch: gh-pages
-          destination_dir: ${{ steps.base.outputs.dest }}
-          keep_files: true
+          path: docs/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
