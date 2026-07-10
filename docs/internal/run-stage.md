@@ -216,6 +216,13 @@ Pandora reco output) — i.e. the old trusted path is the only path for calo.
 
 ## Gotchas (all of them)
 
+- **Use the right host python:** launch `run_stage.py` with
+  `software/colliderml_env/bin/python`. The default login-node PATH can resolve
+  to an ancient jupyter python whose `simple_slurm` lacks `add_cmd` (SLURM
+  submission crashes). That env also swallows INFO logging — a successful
+  run/dry-run can print *nothing*; check the exit code and the
+  `<dataset>/<version>/dry_run/` scripts. The git-commit gate prompts
+  interactively, so commit your config first when running headless.
 - **Run from a config branch, not `master`** — the git-guard blocks it
   (`--allow-master` to override).
 - **`podman-hpc` fails *silently* on shared-qos nodes.** Use a login node or an
