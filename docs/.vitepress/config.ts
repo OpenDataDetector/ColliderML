@@ -1,9 +1,9 @@
 import { defineConfig } from 'vitepress'
 
-// Base path is branch-aware: `main` serves the canonical site at
-// `/ColliderML/`, `staging` (and PR previews) serve at `/ColliderML/staging/`.
-// The deploy workflow sets VITEPRESS_BASE accordingly; leave the default
-// for local `vitepress dev`.
+// The deploy workflow (Actions-based Pages, main only) sets
+// VITEPRESS_BASE=/ColliderML/; leave the default for local `vitepress dev`.
+// NB: the old /ColliderML/staging/ preview was dropped with the move off the
+// gh-pages branch build (see deploy-docs.yml) — no workflow deploys `staging`.
 const base = process.env.VITEPRESS_BASE ?? '/ColliderML/'
 
 const config = defineConfig({

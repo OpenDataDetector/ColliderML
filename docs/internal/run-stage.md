@@ -196,8 +196,9 @@ A same-seed digitization of the same edm4hep input was run in `sw:pr-8` emitting
 - **Fitted track parameters are bit-identical** — max |native − convert_all| for
   `d0`, `z0`, `phi`, `theta`, `qOverP` = **0.0** across all matched tracks.
 - Particles: identical per-event counts and PDG multisets. Tracker hits:
-  consistent under the schema mapping (native rows are measurements /
-  Release-2 layout; v1 rows per-measurement).
+  consistent under the schema mapping (both are one row per measurement —
+  native in the event-nested Release-2 layout with a separate per-simhit
+  `tracker_simhits` table, v1 flat).
 - **Known, intended differences:** (1) `convert_all` **drops events with zero
   tracks**; the native writer keeps them as empty event-rows — downstream code
   must not assume identical event_id density. (2) Table schemas differ (flat v1
