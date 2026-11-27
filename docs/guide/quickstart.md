@@ -221,17 +221,16 @@ for i, event in enumerate(dataset):
 
 ## Available Physics Processes
 
-ColliderML includes multiple physics processes. These examples stream the
-events instead of downloading the configuration:
+ColliderML includes multiple physics processes. These examples load the
+first shard of each:
 
 ### Top Quark Pair Production (ttbar)
 
 ```python
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
-    "ttbar_pu0_particles",
+    data_files="data/ttbar_pu0_particles/train-00000-of-01000.parquet",
     split="train",
-    streaming=True,
 )
 ```
 
@@ -240,9 +239,8 @@ dataset = load_dataset(
 ```python
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
-    "ggf_pu0_particles",
+    data_files="data/ggf_pu0_particles/train-00000-of-01000.parquet",
     split="train",
-    streaming=True,
 )
 ```
 
@@ -251,9 +249,8 @@ dataset = load_dataset(
 ```python
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
-    "dihiggs_pu0_particles",
+    data_files="data/dihiggs_pu0_particles/train-00000-of-01000.parquet",
     split="train",
-    streaming=True,
 )
 ```
 
