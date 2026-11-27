@@ -97,3 +97,36 @@ def test_subsample_pileup_works_lazy() -> None:
     assert collected["particles"]["particle_id"].to_list() == [[10]]
 
 
+
+
+def test_subsample_pileup_calo_mask_is_per_event() -> None:
+    """The kept ids of one event must not leak into another (the mask is built per event)."""
+    from colliderml.physics.pileup import subsample_pileup
+
+    particles = pl.DataFrame(
+        {
+            "event_id": [1, 2],
+            "particle_id": [[10, 11], [10, 11]],
+            "vertex_primary": [[1, 2], [2, 1]],
+        }
+    )
+    calo_hits = pl.DataFrame(
+        {
+            "event_id": [1, 2],
+            "detector": [[0, 1], [0, 1]],
+            "total_energy": [[3.0, 4.0], [3.0, 4.0]],
+            "contrib_particle_ids": [[[10, 11], [11]], [[10, 11], [11]]],
+            "contrib_energies": [[[1.0, 2.0], [4.0]], [[1.0, 2.0], [4.0]]],
+            "contrib_times": [[[0.1, 0.2], [0.3]], [[0.1, 0.2], [0.3]]],
+        }
+    )
+
+    out = subsample_pileup({"particles": particles, "calo_hits": calo_hits}, target_vertices=1)
+
+    ch = out["calo_hits"].sort("event_id")
+    assert ch["event_id"].to_list() == [1, 2]
+    assert ch["contrib_particle_ids"].to_list() == [[[10]], [[11], [11]]]
+    assert ch["total_energy"].to_list() == [[1.0], [2.0, 4.0]]
+    # The raw cell energies stay one value per kept cell.
+    assert ch["_total_energy_raw"].to_list() == [[3.0], [3.0, 4.0]]
+    assert not [c for c in ch.columns if c.startswith("_keep") or c == "_kept_particle_ids"]

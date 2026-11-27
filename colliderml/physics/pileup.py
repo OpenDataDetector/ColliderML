@@ -97,6 +97,21 @@ def _membership_mask(list_col: str, kept_list_col: str) -> pl.Expr:
     )
 
 
+def _nested_membership_mask(list_col: str, kept_list_col: str) -> pl.Expr:
+    """Like :func:`_membership_mask` for a list-of-lists column (one inner list per cell).
+
+    Built once per event, so the kept-ids list is never copied onto every cell row.
+    """
+
+    def _mask(s: dict) -> list:
+        kept = set(s[kept_list_col] or [])
+        return [[x in kept for x in (inner or [])] for inner in (s[list_col] or [])]
+
+    return pl.struct([list_col, kept_list_col]).map_elements(
+        _mask, return_dtype=pl.List(pl.List(pl.Boolean))
+    )
+
+
 def _filter_list_by_mask(list_col: str, mask_col: str, return_dtype: pl.DataType) -> pl.Expr:
     """Filter a list column by an aligned list[bool] mask."""
     return pl.struct([list_col, mask_col]).map_elements(
@@ -227,8 +242,14 @@ def _filter_calo_hits_by_particle_ids(
             and isinstance(dtype, pl.List)
         ]
 
-    # Explode one row per cell, keeping contrib cols as lists-of-scalars.
-    base = calo_hits.join(kept_ids_table, on="event_id", how="left")
+    # Contribution mask per event (list of lists aligned with contrib_particle_ids). Computing it
+    # before the explode keeps the kept-ids list off the cell rows: joined there it was copied onto
+    # every cell and used tens of GB for a few events.
+    base = (
+        calo_hits.join(kept_ids_table, on="event_id", how="left")
+        .with_columns(_keep_contrib=_nested_membership_mask("contrib_particle_ids", "_kept_particle_ids"))
+        .drop("_kept_particle_ids")
+    )
     # Rename raw total_energy if present to avoid column name collisions downstream.
     if isinstance(base, pl.LazyFrame):
         if "total_energy" in base.collect_schema().names():
@@ -237,11 +258,12 @@ def _filter_calo_hits_by_particle_ids(
         if "total_energy" in base.columns:
             base = base.rename({"total_energy": "_total_energy_raw"})
 
-    exploded = base.explode(cell_cols + contrib_cols)
-
-    # Filter inner contribution lists in lock-step based on kept particle ids.
-    contrib_mask = _membership_mask("contrib_particle_ids", "_kept_particle_ids")
-    exploded = exploded.with_columns(_keep_contrib=contrib_mask)
+    # Explode one row per cell, keeping contrib cols (and their mask) as lists-of-scalars.
+    # The raw total_energy is a cell-level list too: left out of the explode, the whole list was
+    # copied onto every cell row (memory quadratic in the cells per event).
+    base_cols = base.collect_schema().names() if isinstance(base, pl.LazyFrame) else base.columns
+    raw_cols = ["_total_energy_raw"] if "_total_energy_raw" in base_cols else []
+    exploded = base.explode(cell_cols + contrib_cols + ["_keep_contrib"] + raw_cols)
 
     # Resolve contribution list dtypes post-explode so we preserve original types.
     if isinstance(exploded, pl.LazyFrame):
@@ -261,7 +283,7 @@ def _filter_calo_hits_by_particle_ids(
         )
         .with_columns(total_energy=pl.col("contrib_energies").list.sum())
         .filter(pl.col("contrib_particle_ids").list.len() > 0)
-        .drop(["_kept_particle_ids", "_keep_contrib"])
+        .drop(["_keep_contrib"])
     )
 
     # Re-nest to one row per event by collecting exploded cells back into lists.
