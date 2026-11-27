@@ -1,14 +1,15 @@
 """Simulation subsystem for ColliderML.
 
-Exposes :func:`simulate` — the end-to-end orchestrator that runs the full
-Pythia/MadGraph → Geant4 → digitization → parquet pipeline inside a Docker
-or Podman container, or submits to the SaaS backend for remote execution.
+Exposes :func:`simulate` — the end-to-end orchestrator that runs the
+Pythia/MadGraph → Geant4 → tracking (→ particle flow → parquet) pipeline in
+Docker or Podman containers, or submits to the SaaS backend for remote
+execution.
 
 The pipeline scripts and stage YAML templates live in the companion
 ``colliderml-production`` repository; this subpackage auto-clones that repo
-into a local cache on first use (mirroring how :mod:`colliderml.simulate`
-already handles OpenDataDetector and MG5aMC_PY8_interface). Users never have
-to know about this — it is an implementation detail of :func:`simulate`.
+into a local cache on first use. The repository ref and the container images
+are pinned together in :file:`pipeline_config.yaml`
+(:func:`load_pipeline_config`).
 
 Typical use::
 
@@ -16,6 +17,10 @@ Typical use::
 
     result = colliderml.simulate(preset="ttbar-quick")
     print(result.run_dir)                 # e.g. /.../colliderml_output/.../runs/0
+
+    # full chain with particle flow; final tables under result.parquet_dir:
+    result = colliderml.simulate(preset="ttbar-pflow-quick")
+    print(result.tables()["pfos"])
 
     # or supply parameters explicitly:
     result = colliderml.simulate(
@@ -31,6 +36,7 @@ Typical use::
 from __future__ import annotations
 
 from colliderml.simulate.api import SimulationResult, simulate
+from colliderml.simulate.config import PipelineConfig, load_pipeline_config
 from colliderml.simulate.presets import (
     PRESETS_PACKAGE_RESOURCE,
     Preset,
@@ -41,6 +47,8 @@ from colliderml.simulate.presets import (
 __all__ = [
     "simulate",
     "SimulationResult",
+    "PipelineConfig",
+    "load_pipeline_config",
     "load_presets",
     "resolve_preset",
     "Preset",

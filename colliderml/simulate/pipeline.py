@@ -34,25 +34,79 @@ class Stage:
             (e.g. ``"simulation/pythia_gen.py"``).
         config: YAML filename inside the channel's config directory
             (e.g. ``"pythia_config.yaml"``).
+        image: Which container image runs the stage: ``"sim"`` or ``"reco"``.
+        particle_flow_only: ``True`` for the stages that only run when
+            particle flow is requested (everything after tracking).
     """
 
     name: str
     stage: str
     script: str
     config: str
+    image: str = "sim"
+    particle_flow_only: bool = False
 
+
+_DETECTOR_STAGES: Tuple[Stage, ...] = (
+    Stage(
+        name="Detector Simulation",
+        stage="simulation",
+        script="simulation/ddsim_run.py",
+        config="simulation_config.yaml",
+    ),
+    Stage(
+        name="Digitization & Reconstruction",
+        stage="digitization",
+        script="simulation/digi_and_reco.py",
+        config="digitization_config.yaml",
+    ),
+)
+
+#: Stages after tracking: truth tables, calorimeter digitisation and Pandora
+#: particle flow (reco image), and the final parquet tables under
+#: ``<output_dir>/parquet/``.
+_PARTICLE_FLOW_STAGES: Tuple[Stage, ...] = (
+    Stage(
+        name="Truth Particle Tables",
+        stage="particles_full",
+        script="postprocessing/convert_particles_full.py",
+        config="particles_full_config.yaml",
+        particle_flow_only=True,
+    ),
+    Stage(
+        name="Calorimeter Digitization & Particle Flow",
+        stage="pandora_reco",
+        script="simulation/pandora_reco.py",
+        config="pandora_reco_config.yaml",
+        image="reco",
+        particle_flow_only=True,
+    ),
+    Stage(
+        name="Calorimeter & Particle Flow Tables",
+        stage="reco_tables",
+        script="postprocessing/convert_reco_tables.py",
+        config="reco_tables_config.yaml",
+        image="reco",
+        particle_flow_only=True,
+    ),
+    Stage(
+        name="Parquet Packaging",
+        stage="package_parquet",
+        script="postprocessing/package_native_parquet.py",
+        config="package_parquet_config.yaml",
+        particle_flow_only=True,
+    ),
+)
 
 #: Pipeline definition for each supported channel.
 #:
-#: Ordering matters — stages run sequentially, and later stages depend on
+#: Ordering matters: stages run sequentially, and later stages depend on
 #: artefacts from earlier ones.
 #:
-#: Digitization & Reconstruction is the final stage: it writes the
-#: tracker_hits / particles / tracks / calo_hits parquet directly via the ACTS
-#: Arrow plugin (requires the native-Arrow image, see
-#: :data:`~colliderml.simulate.docker.DEFAULT_IMAGE`). This replaced the former
-#: separate "Parquet Conversion" (convert_all.py) stage, which crashed on
-#: merged-cluster measurements.
+#: Without particle flow the chain ends at Digitization & Reconstruction,
+#: which writes the tracker_hits / particles / tracks parquet of the run
+#: directly through the ACTS Arrow plugin. With particle flow the remaining
+#: stages run as well and the final tables land in ``<output_dir>/parquet/``.
 CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
     "higgs_portal": (
         Stage(
@@ -61,18 +115,8 @@ CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
             script="simulation/pythia_gen.py",
             config="pythia_config.yaml",
         ),
-        Stage(
-            name="Detector Simulation",
-            stage="simulation",
-            script="simulation/ddsim_run.py",
-            config="simulation_config.yaml",
-        ),
-        Stage(
-            name="Digitization & Reconstruction",
-            stage="digitization",
-            script="simulation/digi_and_reco.py",
-            config="digitization_config.yaml",
-        ),
+        *_DETECTOR_STAGES,
+        *_PARTICLE_FLOW_STAGES,
     ),
     "ttbar": (
         Stage(
@@ -93,18 +137,8 @@ CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
             script="simulation/pythia_gen.py",
             config="pythia_config.yaml",
         ),
-        Stage(
-            name="Detector Simulation",
-            stage="simulation",
-            script="simulation/ddsim_run.py",
-            config="simulation_config.yaml",
-        ),
-        Stage(
-            name="Digitization & Reconstruction",
-            stage="digitization",
-            script="simulation/digi_and_reco.py",
-            config="digitization_config.yaml",
-        ),
+        *_DETECTOR_STAGES,
+        *_PARTICLE_FLOW_STAGES,
     ),
     # NOTE: `single_muon` is intentionally absent. Its preset was removed and it
     # was mis-routed through Pythia generation (it needs an ACTS particle-gun
@@ -113,11 +147,13 @@ CHANNEL_STAGES: Dict[str, Tuple[Stage, ...]] = {
 }
 
 
-def get_channel_stages(channel: str) -> Tuple[Stage, ...]:
+def get_channel_stages(channel: str, *, particle_flow: bool = False) -> Tuple[Stage, ...]:
     """Return the ordered pipeline stages for a channel.
 
     Args:
         channel: Physics channel name.
+        particle_flow: Include the stages after tracking
+            (:attr:`Stage.particle_flow_only`). Off by default.
 
     Returns:
         Tuple of :class:`Stage` in execution order.
@@ -128,7 +164,10 @@ def get_channel_stages(channel: str) -> Tuple[Stage, ...]:
     if channel not in CHANNEL_STAGES:
         available = ", ".join(sorted(CHANNEL_STAGES.keys()))
         raise ValueError(f"Unknown simulation channel '{channel}'. Available: {available}")
-    return CHANNEL_STAGES[channel]
+    stages = CHANNEL_STAGES[channel]
+    if particle_flow:
+        return stages
+    return tuple(stage for stage in stages if not stage.particle_flow_only)
 
 
 def list_channels() -> List[str]:
@@ -176,36 +215,52 @@ def generate_stage_manifest(
     channel: str,
     *,
     prod_root: Path,
+    particle_flow: bool = False,
 ) -> List[Dict[str, str]]:
     """Assemble the list of (script, config) pairs to execute for a channel.
 
-    Only stages whose config YAML actually exists in the production checkout
-    are included — this is how ``single_muon`` gets to skip MadGraph without
-    any special casing.
+    A generation or tracking stage whose config YAML is absent from the
+    production checkout is skipped. With ``particle_flow=True`` every
+    particle-flow stage must have its config: a checkout without them
+    cannot run the full chain, and stopping early would look like success.
 
     Args:
         channel: Physics channel name.
         prod_root: Root of the :mod:`colliderml-production` checkout.
+        particle_flow: Include the stages after tracking (truth tables,
+            Pandora, calo/PFO tables, parquet packaging).
 
     Returns:
-        List of dicts with keys ``name``, ``stage``, ``script``,
-        ``config_path`` (the last is *relative to* ``prod_root`` so it can
-        be passed straight to a container that mounts ``prod_root`` as
-        ``/workspace``).
+        List of dicts with keys ``name``, ``stage``, ``script``, ``image``
+        (``"sim"`` or ``"reco"``) and ``config_path`` (*relative to*
+        ``prod_root`` so it can be passed straight to a container that
+        mounts ``prod_root`` as ``/workspace``).
+
+    Raises:
+        FileNotFoundError: If ``particle_flow`` is set and the checkout
+            lacks the config of a particle-flow stage.
     """
-    stages = get_channel_stages(channel)
+    stages = get_channel_stages(channel, particle_flow=particle_flow)
     config_dir = find_config_dir(channel, prod_root)
 
     manifest: List[Dict[str, str]] = []
     for stage in stages:
         config_file = config_dir / stage.config
         if not config_file.exists():
+            if stage.particle_flow_only:
+                raise FileNotFoundError(
+                    f"{config_file} not found: the colliderml-production checkout at "
+                    f"{prod_root} has no particle-flow configs for channel '{channel}'. "
+                    "It is probably older than the pinned pipeline release; delete it "
+                    "to let simulate() re-clone."
+                )
             continue
         manifest.append(
             {
                 "name": stage.name,
                 "stage": stage.stage,
                 "script": stage.script,
+                "image": stage.image,
                 "config_path": str(config_file.relative_to(prod_root)),
             }
         )

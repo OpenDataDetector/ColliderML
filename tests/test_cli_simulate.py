@@ -82,6 +82,38 @@ def test_simulate_local_invokes_simulate(monkeypatch: pytest.MonkeyPatch) -> Non
     assert captured["quiet"] is True
 
 
+def test_simulate_particle_flow_flags_reach_simulate(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: Dict[str, Any] = {}
+
+    def fake_simulate(**kwargs: Any) -> _FakeSimulationResult:
+        captured.update(kwargs)
+        return _FakeSimulationResult(run_dir="/tmp/out/runs/0")
+
+    import colliderml.simulate as simulate_pkg
+
+    monkeypatch.setattr(simulate_pkg, "simulate", fake_simulate)
+
+    rc = main(
+        [
+            "simulate", "--channel", "ttbar", "--events", "2", "--pileup", "200",
+            "--particle-flow", "--reco-image", "reco:test", "--threads", "8",
+            "--pandora-processes", "2",
+        ]
+    )
+    assert rc == 0
+    assert captured["particle_flow"] is True
+    assert captured["reco_image"] == "reco:test"
+    assert captured["threads"] == 8
+    assert captured["pandora_processes"] == 2
+    assert captured["pileup"] == 200
+
+
+def test_simulate_particle_flow_flag_is_tristate() -> None:
+    assert _parse(["simulate", "--preset", "ttbar-quick"]).particle_flow is None
+    assert _parse(["simulate", "--preset", "ttbar-quick", "--particle-flow"]).particle_flow is True
+    assert _parse(["simulate", "--preset", "ttbar-quick", "--no-particle-flow"]).particle_flow is False
+
+
 def test_simulate_remote_invokes_simulate(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: Dict[str, Any] = {}
 
@@ -121,6 +153,8 @@ def test_list_presets_prints_entries(capsys: pytest.CaptureFixture) -> None:
     assert "ttbar-quick" in out
     assert "higgs-portal-quick" in out
     assert "channel=" in out
+    pflow_line = next(line for line in out.splitlines() if line.startswith("ttbar-pflow-quick"))
+    assert "pflow=yes" in pflow_line
 
 
 # ---------------------------------------------------------------------------

@@ -1,19 +1,19 @@
 """Container runtime management for local simulation.
 
-This module wraps either ``docker`` or ``podman`` (whichever is installed)
-and runs each pipeline stage inside the ODD software container. It is
-deliberately agnostic about which runtime is present so that CI, macOS
-users (Podman), and NERSC (neither available — fallback to
-``simulate(remote=True)``) all get consistent ergonomics.
+This module wraps ``docker``, ``podman`` or ``podman-hpc`` (whichever is
+installed) and runs each pipeline stage inside a container. Two images are
+involved: the *sim* image (generation, Geant4, ACTS tracking, packaging) and the
+*reco* image (calorimeter digitisation and Pandora particle flow).
 
-The key architectural detail is that the pipeline scripts, stage configs,
-and supporting data (OpenDataDetector geometry, MG5aMC_PY8_interface, the
-container bootstrap script) all live in the companion
-:mod:`colliderml-production` repository — *not* in the public library.
-:func:`clone_colliderml_production` fetches that repo at a pinned git ref
-into a user-visible cache directory the first time it is needed; subsequent
-runs reuse the clone. The clone is then mounted inside the container as
-``/workspace``.
+The pipeline scripts, stage configs and the in-container environment setup all
+live in the companion :mod:`colliderml-production` repository, not in the
+public library. :func:`clone_colliderml_production` fetches that repo at the
+pinned git ref into a user-visible cache directory the first time it is
+needed; subsequent runs reuse the clone. The clone is then mounted inside the
+container as ``/workspace``.
+
+The pinned ref and the image names come from
+:mod:`colliderml.simulate.config` (:file:`pipeline_config.yaml`).
 """
 
 from __future__ import annotations
@@ -26,34 +26,39 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional
 
-#: Default OpenDataDetector software image. Pinned to a known-good digest;
-#: override with ``image=...`` on :func:`simulate` or the ``--image`` CLI flag.
-#:
-#: This is the native-Arrow image: ACTS built with the Arrow/Parquet plugin so
-#: the digitization stage writes parquet directly (replacing convert_all.py,
-#: which crashed on merged-cluster measurements). Pinned by digest to the
-#: linux-ubuntu24.04 (x86_64) build from OpenDataDetector/sw PR #3 while the
-#: upstream Arrow PRs land; switch to the released ``sw`` tag once they merge.
-DEFAULT_IMAGE = "ghcr.io/opendatadetector/sw@sha256:20e4df7b0d6befd70ce0113d852350b25cbd9aac659d1bc530036a2c85a68f89"
+from colliderml.simulate.config import ENV_OVERRIDES, load_pipeline_config
+
+_PINNED = load_pipeline_config(environ={})
+
+#: Default sim image (generation, Geant4, ACTS tracking, packaging); override
+#: with ``image=...`` on :func:`simulate` or the ``--image`` CLI flag.
+DEFAULT_IMAGE = _PINNED.sim_image
+
+#: Default reco image (calorimeter digitisation and Pandora); override with
+#: ``reco_image=...`` or ``--reco-image``.
+DEFAULT_RECO_IMAGE = _PINNED.reco_image
 
 #: Git repository that houses the simulation pipeline scripts and configs.
-COLLIDERML_PRODUCTION_REPO = "https://github.com/OpenDataDetector/colliderml-production.git"
+COLLIDERML_PRODUCTION_REPO = _PINNED.production_repo
 
-#: Pinned ref for reproducibility. When a new pipeline release is cut, bump
-#: this. Can also be overridden per-invocation via ``COLLIDERML_PRODUCTION_REF``.
-#:
-#: .. note::
-#:    Pinned to the ``pipeline-v0.2.1`` tag on the colliderml-production repo:
-#:    the digitization stage emits ACTS-native parquet directly (merging on),
-#:    which replaces the convert_all.py post-processing, and uses ODD v5.0.0
-#:    (the released-dataset tag). Requires the native-Arrow :data:`DEFAULT_IMAGE`.
-#:    Bump in lockstep with future pipeline tags when the upstream cuts a new
-#:    pipeline release.
-COLLIDERML_PRODUCTION_REF = "pipeline-v0.2.1"
+#: Pinned ref of that repository, bumped together with the images in
+#: :file:`pipeline_config.yaml` when a new pipeline release is cut.
+COLLIDERML_PRODUCTION_REF = _PINNED.production_ref
 
 #: Environment variable override for the pinned ref (useful for testing
 #: against an in-flight branch of the production repo).
-COLLIDERML_PRODUCTION_REF_ENV = "COLLIDERML_PRODUCTION_REF"
+COLLIDERML_PRODUCTION_REF_ENV = ENV_OVERRIDES["production_ref"]
+
+#: Runtimes probed by :func:`get_container_runtime`, in order of preference.
+SUPPORTED_RUNTIMES = ("docker", "podman", "podman-hpc")
+
+#: Script in the production repo that sets up a stage's environment in the
+#: container; takes the stage's image kind (``sim`` or ``reco``).
+STAGE_ENV_SCRIPT = "scripts/cli/docker_stage_env.sh"
+
+#: Script in the production repo that records wall time and peak memory of a
+#: stage in ``<output>/pipeline_timing.csv``.
+STAGE_TIMER_SCRIPT = "scripts/cli/stage_timer.py"
 
 
 class ContainerRuntimeError(RuntimeError):
@@ -90,22 +95,21 @@ def default_cache_root() -> Path:
 def get_container_runtime() -> str:
     """Return the container runtime binary to use.
 
-    Prefers Docker when both are installed (the production-repo scripts
-    were developed against Docker). Falls back to Podman when Docker is not
-    on ``$PATH``.
+    Takes the first of :data:`SUPPORTED_RUNTIMES` on ``$PATH``: Docker,
+    then Podman, then ``podman-hpc`` (the Podman wrapper on HPC systems
+    such as NERSC Perlmutter).
 
     Returns:
-        ``"docker"`` or ``"podman"``.
+        ``"docker"``, ``"podman"`` or ``"podman-hpc"``.
 
     Raises:
-        ContainerRuntimeError: If neither is installed.
+        ContainerRuntimeError: If none is installed.
     """
-    if shutil.which("docker"):
-        return "docker"
-    if shutil.which("podman"):
-        return "podman"
+    for runtime in SUPPORTED_RUNTIMES:
+        if shutil.which(runtime):
+            return runtime
     raise ContainerRuntimeError(
-        "Neither docker nor podman is installed.\n"
+        "No container runtime on PATH (looked for docker, podman, podman-hpc).\n"
         "  - Docker: https://docs.docker.com/get-docker/\n"
         "  - Podman: https://podman.io/getting-started/installation\n"
         "Or use remote simulation: colliderml.simulate(..., remote=True)"
@@ -146,8 +150,11 @@ def check_runtime_available(runtime: Optional[str] = None) -> str:
 def check_image_available(image: str = DEFAULT_IMAGE, *, runtime: Optional[str] = None) -> bool:
     """Return ``True`` iff the container image is already present locally."""
     rt = runtime or get_container_runtime()
+    # `image exists` is the Podman query; it also sees podman-hpc's migrated
+    # images, which `image inspect` misses on compute nodes.
+    query = "inspect" if Path(rt).name == "docker" else "exists"
     result = subprocess.run(
-        [rt, "image", "inspect", image],
+        [rt, "image", query, image],
         capture_output=True,
         text=True,
     )
@@ -162,8 +169,8 @@ def pull_image(
 ) -> bool:
     """Ensure the container image is available locally, pulling if needed.
 
-    The image is roughly 10 GB — we warn interactively before kicking off
-    a fresh pull to avoid surprising users on metered connections. Pass
+    The images are large (about 6 GB for the sim image, 27 GB for the reco
+    image), so we ask before starting a fresh pull. Pass
     ``interactive=False`` for CI or scripted callers.
 
     Args:
@@ -181,7 +188,7 @@ def pull_image(
         return True
     if interactive and sys.stdin.isatty():
         print(f"\nContainer image {image} is not present locally.")
-        print("This is approximately a 10 GB download.")
+        print("This is a large download (about 6 GB for the sim image, 27 GB for the reco image).")
         try:
             response = input("Continue? [Y/n]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -197,7 +204,7 @@ def pull_image(
 
 def _resolve_production_ref() -> str:
     """Return the effective colliderml-production git ref to clone."""
-    return os.environ.get(COLLIDERML_PRODUCTION_REF_ENV, COLLIDERML_PRODUCTION_REF)
+    return os.environ.get(COLLIDERML_PRODUCTION_REF_ENV) or COLLIDERML_PRODUCTION_REF
 
 
 def clone_colliderml_production(
@@ -302,38 +309,15 @@ def clone_colliderml_production(
     return clone_dir
 
 
-def _ensure_external_caches(prod_root: Path) -> Path:
-    """Populate the on-host ``.cache`` directory inside the production checkout.
+def _cache_dir(prod_root: Path) -> Path:
+    """Return (creating it if needed) the cache directory mounted as ``/cache``.
 
-    Clones MG5aMC_PY8_interface into ``<prod_root>/.cache/`` so the container
-    can find it at ``/cache/MG5aMC_PY8_interface``.
-
-    OpenDataDetector is *not* cloned here: the sw image bakes ODD v5.0.0 in at
-    ``/opt/odd`` (the tag the released dataset was generated with), and the
-    in-container ``setup_container_env.sh`` uses it directly — or, on an image
-    without a baked ODD, clones v5.0.0 itself (resolving the LFS material map,
-    since git-lfs lives in the container, not necessarily on the host).
+    It lives at ``<prod_root>/.cache`` and holds what the in-container setup
+    downloads on first use: the Geant4 datasets (about 2 GB) and a few Python
+    packages. Everything else the stages need is in the images.
     """
     cache_dir = prod_root / ".cache"
     cache_dir.mkdir(exist_ok=True)
-
-    mg5_marker = cache_dir / "MG5aMC_PY8_interface" / "MG5aMC_PY8_interface.cc"
-    if not mg5_marker.exists():
-        print("Cloning MG5aMC_PY8_interface into simulate cache ...")
-        subprocess.run(
-            [
-                "git",
-                "clone",
-                "--quiet",
-                "--depth",
-                "1",
-                "https://github.com/mg5amcnlo/MG5aMC_PY8_interface.git",
-                str(cache_dir / "MG5aMC_PY8_interface"),
-            ],
-            capture_output=True,
-            timeout=120,
-        )
-
     return cache_dir
 
 
@@ -344,10 +328,13 @@ def run_stage(
     cache_dir: Path,
     script: str,
     config_path: str,
+    stage: Optional[str] = None,
+    image_kind: str = "sim",
     seed: int = 42,
     run_id: str = "0",
     image: str = DEFAULT_IMAGE,
     runtime: Optional[str] = None,
+    timeout: Optional[float] = None,
 ) -> subprocess.CompletedProcess[bytes]:
     """Run a single pipeline stage inside the container.
 
@@ -361,23 +348,44 @@ def run_stage(
             repo (e.g. ``"simulation/pythia_gen.py"``).
         config_path: Path to the stage's YAML config, relative to
             ``prod_root``.
+        stage: Stage identifier written to ``pipeline_timing.csv``.
+            Defaults to the script's file name.
+        image_kind: ``"sim"`` or ``"reco"``: which environment the
+            production repo's setup script prepares. Must match ``image``.
         seed: Random seed forwarded to the stage script.
         run_id: Run subdirectory under ``output_dir/runs/``.
         image: Container image reference.
         runtime: Runtime to use; auto-detected if ``None``.
+        timeout: Seconds after which the stage is abandoned. ``None``
+            (the default) waits indefinitely: a pile-up 200 Geant4 stage
+            can take hours.
 
     Returns:
         :class:`subprocess.CompletedProcess` for the container run.
+
+    Raises:
+        ContainerRuntimeError: If the production checkout predates the
+            two-image pipeline (no stage environment script).
     """
     rt = runtime or get_container_runtime()
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    if not (prod_root / STAGE_ENV_SCRIPT).is_file():
+        raise ContainerRuntimeError(
+            f"{prod_root} has no {STAGE_ENV_SCRIPT}: this colliderml-production "
+            f"checkout is older than {COLLIDERML_PRODUCTION_REF}, which this version "
+            "of colliderml needs. Delete the checkout to let simulate() re-clone it."
+        )
+
     script_dir = os.path.dirname(script)
     script_name = os.path.basename(script)
+    stage_label = stage or Path(script_name).stem
 
     container_cmd = (
-        f"source /workspace/scripts/cli/setup_container_env.sh && "
+        f"source /workspace/{STAGE_ENV_SCRIPT} {image_kind} && "
         f"cd /workspace/scripts/{script_dir} && "
+        f"python3 /workspace/{STAGE_TIMER_SCRIPT} "
+        f"--record /output/pipeline_timing.csv --stage {stage_label} -- "
         f"python3 {script_name} "
         f"--config /workspace/{config_path} "
         f"--output /output/runs "
@@ -397,21 +405,23 @@ def run_stage(
         f"{cache_dir}:/cache",
         "-e",
         "COLLIDERML_CACHE=/cache",
+        "--entrypoint",
+        "/bin/bash",
         image,
         "-c",
         container_cmd,
     ]
-    return subprocess.run(cmd, timeout=7200)
+    return subprocess.run(cmd, timeout=timeout)
 
 
 def _copy_madgraph_output(output_dir: Path, run_id: str) -> None:
     """Bridge MadGraph output to where the Pythia stage expects it.
 
-    MadGraph writes ``runs/all/0/events.hepmc.gz`` but the downstream
+    MadGraph writes ``runs/all/<run_id>/events.hepmc.gz`` but the downstream
     Pythia stage reads ``runs/<run_id>/events.hepmc.gz``. This keeps that
     stitch out of the stage scripts themselves.
     """
-    src = output_dir / "runs" / "all" / "0" / "events.hepmc.gz"
+    src = output_dir / "runs" / "all" / run_id / "events.hepmc.gz"
     dst_dir = output_dir / "runs" / run_id
     dst = dst_dir / "events.hepmc.gz"
     if src.exists() and not dst.exists():
@@ -427,6 +437,7 @@ def run_pipeline(
     seed: int = 42,
     run_id: str = "0",
     image: str = DEFAULT_IMAGE,
+    reco_image: str = DEFAULT_RECO_IMAGE,
     prod_root: Optional[Path] = None,
     runtime: Optional[str] = None,
     on_stage_start: Optional[Callable[[int, int, str], None]] = None,
@@ -442,7 +453,9 @@ def run_pipeline(
             :func:`colliderml.simulate.pipeline.generate_stage_manifest`.
         seed: Random seed forwarded to each stage.
         run_id: Run subdirectory under ``output_dir/runs/``.
-        image: Container image reference.
+        image: Sim image reference.
+        reco_image: Reco image reference, used by the stages whose manifest
+            entry has ``image == "reco"``.
         prod_root: Host path to the production-repo clone. If ``None``,
             :func:`clone_colliderml_production` is called.
         runtime: Runtime to use; auto-detected if ``None``.
@@ -460,7 +473,7 @@ def run_pipeline(
     rt = runtime or check_runtime_available()
     if prod_root is None:
         prod_root = clone_colliderml_production()
-    cache_dir = _ensure_external_caches(prod_root)
+    cache_dir = _cache_dir(prod_root)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     total = len(stage_manifest)
@@ -470,15 +483,18 @@ def run_pipeline(
         if on_stage_start is not None:
             on_stage_start(i, total, stage["name"])
 
+        image_kind = stage.get("image", "sim")
         completed = run_stage(
             prod_root=prod_root,
             output_dir=output_dir,
             cache_dir=cache_dir,
             script=stage["script"],
             config_path=stage["config_path"],
+            stage=stage["stage"],
+            image_kind=image_kind,
             seed=seed,
             run_id=run_id,
-            image=image,
+            image=reco_image if image_kind == "reco" else image,
             runtime=rt,
         )
         stage_run = StageRun(

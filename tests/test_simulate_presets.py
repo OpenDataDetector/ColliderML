@@ -72,6 +72,7 @@ def test_preset_as_dict_roundtrips_fields() -> None:
         "events": 5,
         "pileup": 2,
         "description": "demo preset",
+        "particle_flow": False,
     }
 
 
@@ -94,3 +95,10 @@ def test_load_presets_rejects_missing_required_field(
     monkeypatch.setattr(presets_mod, "_read_presets_file", _missing_channel)
     with pytest.raises(ValueError, match="missing required field 'channel'"):
         load_presets()
+
+
+def test_particle_flow_preset_is_bundled_and_others_default_off() -> None:
+    catalogue = load_presets()
+    pflow = catalogue["ttbar-pflow-quick"]
+    assert (pflow.channel, pflow.events, pflow.pileup, pflow.particle_flow) == ("ttbar", 10, 0, True)
+    assert catalogue["ttbar-quick"].particle_flow is False

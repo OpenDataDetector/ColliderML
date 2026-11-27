@@ -137,6 +137,10 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             seed=args.seed,
             output_dir=args.output,
             image=args.image,
+            reco_image=args.reco_image,
+            particle_flow=args.particle_flow,
+            threads=args.threads,
+            pandora_processes=args.pandora_processes,
             remote=use_remote,
             run_id=args.run_id,
             quiet=args.quiet,
@@ -149,6 +153,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         print(f"Poll with: colliderml status {result.remote_request_id}")
     else:
         print(f"Output: {result.run_dir}")
+        if getattr(result, "particle_flow", False):
+            print(f"Tables: {result.parquet_dir}")
     return 0
 
 
@@ -169,6 +175,7 @@ def _cmd_list_presets(args: argparse.Namespace) -> int:
             f"channel={p.channel:<{channel_width}} "
             f"events={p.events:<6} "
             f"pileup={p.pileup:<4} "
+            f"pflow={'yes' if p.particle_flow else 'no':<4}"
             f"{p.description}"
         )
         print(line.rstrip())
@@ -298,7 +305,30 @@ def build_parser() -> argparse.ArgumentParser:
     p_sim.add_argument(
         "--image",
         default=None,
-        help="Container image override. Defaults to the pinned ODD sw image.",
+        help="Sim image override. Defaults to the pinned ODD sw image.",
+    )
+    p_sim.add_argument(
+        "--reco-image",
+        default=None,
+        help="Reco image override (calorimeter digitization and Pandora). "
+        "Defaults to the pinned image; only used with particle flow.",
+    )
+    p_sim.add_argument(
+        "--particle-flow",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Continue after tracking with Pandora particle flow and write the final "
+        "parquet tables. Defaults to the preset's setting (off without a preset).",
+    )
+    p_sim.add_argument(
+        "--threads", type=int, default=None, help="Threads for Geant4 and ACTS (default: 1)."
+    )
+    p_sim.add_argument(
+        "--pandora-processes",
+        type=int,
+        default=None,
+        help="Concurrent Pandora processes (default: 1). One needs about 2 GB without "
+        "pileup, about 11 GB per event at pileup 200.",
     )
     exec_mode = p_sim.add_mutually_exclusive_group()
     exec_mode.add_argument(

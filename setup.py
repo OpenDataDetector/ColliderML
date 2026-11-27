@@ -52,7 +52,7 @@ setup(
     },
     include_package_data=True,
     package_data={
-        "colliderml.simulate": ["presets.yaml"],
+        "colliderml.simulate": ["presets.yaml", "pipeline_config.yaml"],
     },
     entry_points={
         "console_scripts": [

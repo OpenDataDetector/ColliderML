@@ -1,6 +1,6 @@
 # ColliderML simulation presets.
 #
-# A preset is a named bundle of (channel, events, pileup) used by
+# A preset is a named bundle of (channel, events, pileup, particle_flow) used by
 # ``colliderml simulate --preset <name>`` (CLI) and
 # ``colliderml.simulate(preset="<name>")`` (Python API).
 #
@@ -12,6 +12,8 @@
 #      ``colliderml/simulate/pipeline.py::CHANNEL_STAGES``.
 #   3. Keep ``description`` to one line so the CLI ``list-presets`` output
 #      stays readable.
+#   4. Set ``particle_flow: true`` to run the chain through Pandora particle
+#      flow and the final parquet tables (default: stop after tracking).
 
 presets:
   # --- Quick test presets (minutes on a workstation) -----------------------
@@ -20,6 +22,13 @@ presets:
     events: 10
     pileup: 0
     description: "ttbar, 10 events, no pileup (~15 min with full sim)"
+
+  ttbar-pflow-quick:
+    channel: ttbar
+    events: 10
+    pileup: 0
+    particle_flow: true
+    description: "ttbar, 10 events, no pileup, with particle flow (~25 min)"
 
   higgs-portal-quick:
     channel: higgs_portal

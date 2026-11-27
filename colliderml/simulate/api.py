@@ -18,10 +18,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
+from colliderml.simulate.config import load_pipeline_config
 from colliderml.simulate.docker import (
-    DEFAULT_IMAGE,
     StageRun,
     check_runtime_available,
     clone_colliderml_production,
@@ -50,6 +50,8 @@ class SimulationResult:
         stages: Per-stage execution results.
         remote_request_id: Set only when ``remote=True`` — the backend's
             request identifier for later polling.
+        particle_flow: Whether the run included particle flow and the final
+            parquet tables.
     """
 
     channel: str
@@ -59,12 +61,35 @@ class SimulationResult:
     run_dir: Path
     stages: List[StageRun] = field(default_factory=list)
     remote_request_id: Optional[str] = None
+    particle_flow: bool = False
+
+    @property
+    def parquet_dir(self) -> Path:
+        """Directory of the final tables of a particle-flow run.
+
+        Laid out as ``<parquet_dir>/{truth,reco}/<table>/*.parquet``. Runs
+        without particle flow do not create it; their per-run tables are
+        under :attr:`run_dir`.
+        """
+        return self.output_dir / "parquet"
 
     def list_files(self) -> List[Path]:
         """List every file produced under :attr:`run_dir`, sorted."""
         if not self.run_dir.exists():
             return []
         return sorted(p for p in self.run_dir.rglob("*") if p.is_file())
+
+    def tables(self) -> Dict[str, List[Path]]:
+        """Final parquet files of a particle-flow run, by table name.
+
+        Returns:
+            Mapping such as ``{"pfos": [...], "tracks": [...]}``; empty if
+            :attr:`parquet_dir` does not exist.
+        """
+        found: Dict[str, List[Path]] = {}
+        for path in sorted(self.parquet_dir.glob("*/*/*.parquet")):
+            found.setdefault(path.parent.name, []).append(path)
+        return found
 
     def __repr__(self) -> str:  # pragma: no cover - trivial
         n_files = len(self.list_files())
@@ -82,24 +107,28 @@ def _apply_runtime_overrides(
     events: int,
     pileup: int,
     seed: int,
+    threads: Optional[int] = None,
+    pandora_processes: Optional[int] = None,
 ) -> list:
     """Write per-run YAML overlays so the caller's kwargs actually take effect.
 
     Each stage in the manifest points at a static YAML config under
-    ``prod_root/configs_development/docker_test/<channel>/``. Those YAMLs
-    have hardcoded ``events``/``pileup`` defaults (e.g. ``events: 10``).
-    Without this overlay step, the caller's ``simulate(events=2, pileup=5)``
-    kwargs get silently dropped — the YAML wins.
+    ``prod_root/configs_development/docker_test/<channel>/`` with hardcoded
+    defaults (e.g. ``events: 10``). This helper:
 
-    This helper:
       1. Reads each stage's original YAML.
-      2. Overrides the ``events`` / ``pileup`` / ``seed`` keys with the
-         caller's values (only when the key already exists in the YAML —
-         we don't add fields that the stage script doesn't know about).
+      2. Overrides the keys below with the caller's values, only where the
+         key already exists in the YAML (we do not add fields a stage script
+         does not know about) and the value is not ``None``.
       3. Writes the modified YAML to
-         ``prod_root/.overlays/<run_id>/<stage>_<original_basename>``.
+         ``prod_root/.overlays/<run_id>/<stage>__<original_basename>``.
       4. Returns a manifest with each entry's ``config_path`` rewritten
          to point at the overlay.
+
+    Keys: ``events``, ``pileup``, ``seed``, ``threads``, ``processes`` (the
+    Pandora stage's process count) and, for the packaging stage, ``run_size``
+    and ``chunk_size``, both set to ``events`` because the one run holds all
+    events and they go into one file per table.
 
     The overlay path stays under ``prod_root`` so the existing
     ``--config /workspace/<config_path>`` in ``run_stage`` keeps working
@@ -110,7 +139,15 @@ def _apply_runtime_overrides(
     overlay_root = prod_root / ".overlays" / run_id
     overlay_root.mkdir(parents=True, exist_ok=True)
 
-    OVERRIDE_KEYS = {"events": events, "pileup": pileup, "seed": seed}
+    overrides = {
+        "events": events,
+        "pileup": pileup,
+        "seed": seed,
+        "threads": threads,
+        "processes": pandora_processes,
+        "run_size": events,
+        "chunk_size": events,
+    }
 
     new_manifest = []
     for stage in manifest:
@@ -119,11 +156,7 @@ def _apply_runtime_overrides(
         with open(orig_path) as f:
             cfg = yaml.safe_load(f) or {}
 
-        # Only override keys the stage's config already declares — don't
-        # inject new fields. e.g. ttbar's madgraph_init_config.yaml has
-        # no `events` key (MadGraph init isn't event-count-driven), so we
-        # leave it alone.
-        for key, value in OVERRIDE_KEYS.items():
+        for key, value in overrides.items():
             if key in cfg and value is not None:
                 cfg[key] = value
 
@@ -152,18 +185,23 @@ def _coerce_preset(
     channel: Optional[str],
     events: Optional[int],
     pileup: Optional[int],
-) -> tuple[str, int, int]:
+    particle_flow: Optional[bool] = None,
+) -> tuple[str, int, int, bool]:
     """Merge a preset (if given) with explicit arguments.
 
     Explicit arguments win over preset values — this lets users take a
     preset as a starting point and bump, say, the pileup without writing
     their own preset.
+
+    Returns:
+        ``(channel, events, pileup, particle_flow)``.
     """
     if preset is not None:
         resolved = resolve_preset(preset) if isinstance(preset, str) else preset
         final_channel = channel or resolved.channel
         final_events = events if events is not None else resolved.events
         final_pileup = pileup if pileup is not None else resolved.pileup
+        final_particle_flow = resolved.particle_flow if particle_flow is None else particle_flow
     else:
         if channel is None:
             raise ValueError(
@@ -178,10 +216,15 @@ def _coerce_preset(
         final_channel = channel
         final_events = int(events)
         final_pileup = int(pileup) if pileup is not None else 0
+        final_particle_flow = bool(particle_flow)
 
     # Channel sanity: catches typos at call time instead of container runtime.
     get_channel_stages(final_channel)
-    return final_channel, int(final_events), int(final_pileup)
+    if int(final_events) < 1:
+        raise ValueError(f"`events` must be at least 1, got {final_events}.")
+    if int(final_pileup) < 0:
+        raise ValueError(f"`pileup` must not be negative, got {final_pileup}.")
+    return final_channel, int(final_events), int(final_pileup), bool(final_particle_flow)
 
 
 def _simulate_remote(
@@ -219,7 +262,11 @@ def simulate(
     pileup: Optional[int] = None,
     seed: int = 42,
     output_dir: Optional[Union[str, Path]] = None,
-    image: str = DEFAULT_IMAGE,
+    image: Optional[str] = None,
+    reco_image: Optional[str] = None,
+    particle_flow: Optional[bool] = None,
+    threads: Optional[int] = None,
+    pandora_processes: Optional[int] = None,
     remote: bool = False,
     run_id: str = "0",
     prod_root: Optional[Union[str, Path]] = None,
@@ -229,13 +276,17 @@ def simulate(
     """Run the ColliderML simulation pipeline.
 
     The pipeline is: event generation (Pythia, or MadGraph + Pythia for
-    NLO channels) → detector simulation (Geant4 via DDSim) → digitization
-    and reconstruction (ACTS) → parquet conversion. Every stage runs inside
-    the OpenDataDetector software container.
+    NLO channels) → detector simulation (Geant4 via DDSim) → tracker
+    digitization, ACTS tracking and vertexing. With ``particle_flow=True``
+    it continues with calorimeter digitization and Pandora particle flow,
+    and writes the final parquet tables (tracks, tracker_hits, calo_cells,
+    calo_clusters, pfos, vertices, particles, generator_particles) to
+    ``<output_dir>/parquet/``. Every stage runs inside a container.
 
     Args:
-        preset: Named preset (e.g. ``"ttbar-quick"``). Sets ``channel``,
-            ``events`` and ``pileup`` if they are not given explicitly. See
+        preset: Named preset (e.g. ``"ttbar-pflow-quick"``). Sets
+            ``channel``, ``events``, ``pileup`` and ``particle_flow`` if
+            they are not given explicitly. See
             :func:`~colliderml.simulate.load_presets`.
         channel: Physics channel (e.g. ``"ttbar"``, ``"higgs_portal"``).
         events: Number of events to simulate.
@@ -243,15 +294,27 @@ def simulate(
         seed: Random seed forwarded to each stage.
         output_dir: Host directory for outputs. Defaults to
             ``./colliderml_output/<channel>_pu<pileup>_<events>evt/``.
-        image: Container image reference. Defaults to the pinned OpenData
-            Detector image.
+        image: Sim image reference (generation, Geant4, tracking,
+            packaging). Defaults to the pinned image, see
+            :func:`~colliderml.simulate.load_pipeline_config`.
+        reco_image: Reco image reference (calorimeter digitization and
+            Pandora). Defaults to the pinned image. Only used with
+            ``particle_flow=True``.
+        particle_flow: Run the stages after tracking. Defaults to the
+            preset's setting, or ``False`` without a preset.
+        threads: Threads for Geant4 and ACTS. Defaults to the stage
+            configs' value (1).
+        pandora_processes: Concurrent Pandora processes. Defaults to the
+            stage config's value (1). One process needs about 2 GB without
+            pileup and about 11 GB per event at pileup 200.
         remote: If ``True``, submit the job to the SaaS backend instead of
             running locally. Requires ``pip install 'colliderml[remote]'``.
+            The backend does not run particle flow yet.
         run_id: Subdirectory under ``output_dir/runs/`` for this run.
         prod_root: Host path to an existing :mod:`colliderml-production`
             checkout. Leave ``None`` to auto-clone on first use.
-        runtime: Override container runtime (``"docker"`` or ``"podman"``).
-            Auto-detected if ``None``.
+        runtime: Override container runtime (``"docker"``, ``"podman"`` or
+            ``"podman-hpc"``). Auto-detected if ``None``.
         quiet: Suppress per-stage progress messages.
 
     Returns:
@@ -260,16 +323,22 @@ def simulate(
 
     Raises:
         ValueError: If neither a preset nor explicit channel/events are
-            supplied, or if the requested channel is unknown.
+            supplied, if the requested channel is unknown, or if
+            ``remote=True`` is combined with particle flow.
         ContainerRuntimeError: If ``remote=False`` and no container runtime
             is available locally.
         RuntimeError: If any pipeline stage exits non-zero.
     """
-    resolved_channel, resolved_events, resolved_pileup = _coerce_preset(
-        preset, channel=channel, events=events, pileup=pileup
+    resolved_channel, resolved_events, resolved_pileup, use_particle_flow = _coerce_preset(
+        preset, channel=channel, events=events, pileup=pileup, particle_flow=particle_flow
     )
 
     if remote:
+        if use_particle_flow:
+            raise ValueError(
+                "Particle flow is not available with remote=True yet. Run it locally, "
+                "or pass particle_flow=False to stop after tracking."
+            )
         return _simulate_remote(
             channel=resolved_channel,
             events=resolved_events,
@@ -278,9 +347,15 @@ def simulate(
         )
 
     # Local container path.
+    pinned = load_pipeline_config()
+    sim_image = image or pinned.sim_image
+    pflow_image = reco_image or pinned.reco_image
+
     rt = check_runtime_available(runtime)
-    if not pull_image(image, runtime=rt):
-        raise RuntimeError("Container image not available. Cannot proceed.")
+    needed_images = [sim_image, pflow_image] if use_particle_flow else [sim_image]
+    for needed in needed_images:
+        if not pull_image(needed, runtime=rt):
+            raise RuntimeError(f"Container image {needed} not available. Cannot proceed.")
 
     out_dir = (
         Path(output_dir).expanduser().resolve()
@@ -295,18 +370,18 @@ def simulate(
         else clone_colliderml_production()
     )
 
-    manifest = generate_stage_manifest(resolved_channel, prod_root=prod)
+    manifest = generate_stage_manifest(
+        resolved_channel, prod_root=prod, particle_flow=use_particle_flow
+    )
     if not manifest:
         raise RuntimeError(
             f"No stages were generated for channel '{resolved_channel}'. "
             f"Is the colliderml-production clone at {prod} up to date?"
         )
 
-    # Apply the caller's events / pileup / seed kwargs by writing per-run
-    # overlay YAMLs under prod_root/.overlays/<run_id>/. Each stage script
-    # reads its config from disk and uses whatever value is in the YAML,
-    # so without this overlay step the static configs win and the
-    # caller's kwargs get silently dropped after we've printed them back.
+    # Apply the caller's kwargs by writing per-run overlay YAMLs under
+    # prod_root/.overlays/<run_id>/. Each stage script reads its config
+    # from disk, so without the overlays the static configs would win.
     manifest = _apply_runtime_overrides(
         manifest,
         prod_root=prod,
@@ -314,6 +389,8 @@ def simulate(
         events=resolved_events,
         pileup=resolved_pileup,
         seed=seed,
+        threads=threads,
+        pandora_processes=pandora_processes,
     )
 
     def _on_start(i: int, total: int, name: str) -> None:
@@ -328,7 +405,8 @@ def simulate(
     if not quiet:
         print(
             f"Running {resolved_channel} pipeline "
-            f"({resolved_events} events, pileup={resolved_pileup}) ..."
+            f"({resolved_events} events, pileup={resolved_pileup}"
+            f"{', particle flow' if use_particle_flow else ''}) ..."
         )
 
     stage_results = run_pipeline(
@@ -337,7 +415,8 @@ def simulate(
         stage_manifest=manifest,
         seed=seed,
         run_id=run_id,
-        image=image,
+        image=sim_image,
+        reco_image=pflow_image,
         prod_root=prod,
         runtime=rt,
         on_stage_start=_on_start,
@@ -345,6 +424,15 @@ def simulate(
     )
 
     run_dir = out_dir / "runs" / run_id
+    result = SimulationResult(
+        channel=resolved_channel,
+        events=resolved_events,
+        pileup=resolved_pileup,
+        output_dir=out_dir,
+        run_dir=run_dir,
+        stages=list(stage_results),
+        particle_flow=use_particle_flow,
+    )
     if not quiet:
         print(f"Done. Output: {run_dir}")
         if run_dir.exists():
@@ -352,15 +440,12 @@ def simulate(
                 if fp.is_file():
                     size_mb = fp.stat().st_size / (1024 * 1024)
                     print(f"  {fp.name} ({size_mb:.1f} MB)")
+        if use_particle_flow:
+            print(f"Tables: {result.parquet_dir}")
+            for name in result.tables():
+                print(f"  {name}")
 
-    return SimulationResult(
-        channel=resolved_channel,
-        events=resolved_events,
-        pileup=resolved_pileup,
-        output_dir=out_dir,
-        run_dir=run_dir,
-        stages=list(stage_results),
-    )
+    return result
 
 
 __all__ = ["simulate", "SimulationResult"]
