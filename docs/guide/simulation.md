@@ -234,6 +234,10 @@ Our test run printed (momenta in GeV):
 9         9     187         32  378.065125        33
 ```
 
+A second run with the same seed can print different numbers: the Geant4
+step with two threads is not always reproducible (see `seed` in the
+[Simulate API](../library/simulate.md)).
+
 `SimulationResult.tables()` returns the same files by table name.
 
 ## More events, more pile-up
