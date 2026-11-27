@@ -81,6 +81,9 @@ Runs the full pipeline for one (channel, events, pileup) configuration.
 - `ContainerRuntimeError` — no container runtime is available and
   `remote=False`.
 - `RuntimeError` — a pipeline stage exited non-zero.
+- `FileExistsError` - the output directory already holds the run.
+- `FileNotFoundError` - the production checkout lacks the script or the
+  config of a stage.
 
 **Example**
 

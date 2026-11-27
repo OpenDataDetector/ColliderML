@@ -372,7 +372,7 @@ def test_tracking_runs_can_share_an_output_directory_with_different_run_ids(
     assert [c["run_id"] for c in captured["run_pipeline"]] == ["a", "b"]
 
 
-@pytest.mark.parametrize("run_id", ["../x", "/abs", "a b", "", "a/b", ".hidden"])
+@pytest.mark.parametrize("run_id", ["../x", "/abs", "a b", "", "a/b", ".hidden", "all"])
 def test_simulate_rejects_run_ids_that_are_not_plain_names(run_id: str) -> None:
     with pytest.raises(ValueError, match="run_id"):
         simulate(channel="ttbar", events=2, run_id=run_id)
@@ -413,21 +413,14 @@ def test_two_output_directories_do_not_share_stage_configs(
     assert first == "/output/configs/0/pythia_generation__pythia_config.yaml"
 
 
-def test_simulate_empty_manifest_raises(
+def test_output_directory_is_checked_before_any_image_is_pulled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _install_simulate_stubs(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        api_mod, "generate_stage_manifest", lambda channel, *, prod_root, particle_flow=False: []
-    )
-    with pytest.raises(RuntimeError, match="No stages were generated"):
-        simulate(
-            channel="higgs_portal",
-            events=1,
-            pileup=0,
-            output_dir=tmp_path / "out",
-            quiet=True,
-        )
+    captured = _install_simulate_stubs(monkeypatch, tmp_path)
+    (tmp_path / "out" / "parquet").mkdir(parents=True)
+    with pytest.raises(FileExistsError):
+        simulate(preset="ttbar-pflow-quick", output_dir=tmp_path / "out", quiet=True)
+    assert captured["pull_image"] == []
 
 
 def test_simulation_result_list_files_includes_stage_output(

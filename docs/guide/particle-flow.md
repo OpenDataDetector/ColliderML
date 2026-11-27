@@ -99,8 +99,9 @@ ten-event run and a small part of a large one. MadGraph uses every core it
 finds (128 on the test machine), so expect this stage to take longer on a
 laptop.
 
-On the first run, add the image download (33 GB unpacked). The Geant4 data
-is another 2 GB, in about 43,000 files.
+On the first run, add the time to pull the two images, which take 33 GB on
+disk once unpacked (the transfer is smaller). The Geant4 data is another
+2 GB, in about 43,000 files.
 
 Wall time and peak memory of every stage of your own run are written to
 `<output>/pipeline_timing.csv`.

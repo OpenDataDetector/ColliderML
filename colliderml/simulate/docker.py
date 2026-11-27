@@ -206,7 +206,7 @@ def pull_image(
         return True
     if interactive and sys.stdin.isatty():
         print(f"\nContainer image {image} is not present locally.")
-        print("This is a large download (unpacked: about 6 GB for the sim image, 27 GB for the reco image).")
+        print("The images are large: about 6 GB (sim) and 27 GB (reco) on disk once unpacked.")
         try:
             response = input("Continue? [Y/n]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -252,6 +252,8 @@ def clone_colliderml_production(
     Returns:
         Path to the cloned production repo, ready to mount as ``/workspace``.
     """
+    if shutil.which("git") is None:
+        raise ContainerRuntimeError("git is not installed; it is needed to fetch the pipeline code.")
     root = (cache_root or default_cache_root()).expanduser().resolve()
     clone_dir = root / "colliderml-production"
     target_ref = ref or _resolve_production_ref()
@@ -320,11 +322,17 @@ def clone_colliderml_production(
             raise ContainerRuntimeError(
                 f"Failed to clone {COLLIDERML_PRODUCTION_REPO}: {result.stderr.strip()}"
             )
-        subprocess.run(
+        checkout = subprocess.run(
             ["git", "-C", str(clone_dir), "checkout", "--quiet", target_ref],
-            check=True,
+            capture_output=True,
+            text=True,
             timeout=60,
         )
+        if checkout.returncode != 0:
+            shutil.rmtree(clone_dir)  # created by this call; not usable at another ref
+            raise ContainerRuntimeError(
+                f"{COLLIDERML_PRODUCTION_REPO} has no ref '{target_ref}': {checkout.stderr.strip()}"
+            )
     return clone_dir
 
 

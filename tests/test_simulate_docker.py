@@ -272,6 +272,27 @@ def test_cached_clone_that_cannot_reach_the_ref_is_an_error(
         clone_colliderml_production(cache_root=tmp_path, ref="pipeline-v9")
 
 
+def test_fresh_clone_of_an_unknown_ref_is_an_error_and_leaves_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_run(cmd, **kwargs):
+        if cmd[1] == "clone":
+            Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(cmd, 1 if "--branch" in cmd else 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="pathspec did not match")
+
+    monkeypatch.setattr(docker_mod.subprocess, "run", fake_run)
+    with pytest.raises(ContainerRuntimeError, match="has no ref 'nope'"):
+        clone_colliderml_production(cache_root=tmp_path, ref="nope")
+    assert not (tmp_path / "colliderml-production").exists()
+
+
+def test_clone_needs_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(docker_mod.shutil, "which", lambda name: None)
+    with pytest.raises(ContainerRuntimeError, match="git is not installed"):
+        clone_colliderml_production(cache_root=tmp_path)
+
+
 @pytest.mark.integration
 def test_clone_colliderml_production_fetches_repo(tmp_path: Path) -> None:
     """Really clone the production repo at the pinned ref into a scratch dir.

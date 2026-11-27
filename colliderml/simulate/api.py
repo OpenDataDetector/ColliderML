@@ -354,9 +354,11 @@ def simulate(
         preset, channel=channel, events=events, pileup=pileup, particle_flow=particle_flow
     )
 
-    if not _RUN_ID_PATTERN.fullmatch(run_id):
+    if not _RUN_ID_PATTERN.fullmatch(run_id) or run_id == "all":
+        # "all" is the directory in which the MadGraph stage keeps its unsplit output
         raise ValueError(
-            f"`run_id` must be a plain name (letters, digits, '_', '.', '-'), got {run_id!r}."
+            f"`run_id` must be a plain name (letters, digits, '_', '.', '-') other than "
+            f"'all', got {run_id!r}."
         )
     if use_particle_flow and run_id != "0":
         raise ValueError(
@@ -383,18 +385,6 @@ def simulate(
         )
 
     # Local container path.
-    pinned = load_pipeline_config()
-    resolved_sim_image = image or pinned.sim_image
-    resolved_reco_image = reco_image or pinned.reco_image
-
-    rt = check_runtime_available(runtime)
-    needed_images = [resolved_sim_image]
-    if use_particle_flow:
-        needed_images.append(resolved_reco_image)
-    for needed in needed_images:
-        if not pull_image(needed, runtime=rt):
-            raise RuntimeError(f"Container image {needed} not available. Cannot proceed.")
-
     out_dir = (
         Path(output_dir).expanduser().resolve()
         if output_dir is not None
@@ -415,6 +405,18 @@ def simulate(
         )
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    pinned = load_pipeline_config()
+    resolved_sim_image = image or pinned.sim_image
+    resolved_reco_image = reco_image or pinned.reco_image
+
+    rt = check_runtime_available(runtime)
+    needed_images = [resolved_sim_image]
+    if use_particle_flow:
+        needed_images.append(resolved_reco_image)
+    for needed in needed_images:
+        if not pull_image(needed, runtime=rt):
+            raise RuntimeError(f"Container image {needed} not available. Cannot proceed.")
+
     prod = (
         Path(prod_root).expanduser().resolve()
         if prod_root is not None
@@ -424,12 +426,6 @@ def simulate(
     manifest = generate_stage_manifest(
         resolved_channel, prod_root=prod, particle_flow=use_particle_flow
     )
-    if not manifest:
-        raise RuntimeError(
-            f"No stages were generated for channel '{resolved_channel}'. "
-            f"Is the colliderml-production clone at {prod} up to date?"
-        )
-
     # Apply the caller's kwargs by writing per-run stage configs under
     # <output_dir>/configs/<run_id>/. Each stage script reads its config
     # from disk, so without them the static configs would win.

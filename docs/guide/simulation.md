@@ -31,7 +31,7 @@ new output directory.
 
 ## Prerequisites
 
-1. **Python 3.10 or newer** — see [Installation](./installation.md).
+1. **Python 3.10 or newer** — see [Installation](./installation.md) — and `git`.
 2. **Docker, podman-hpc or Podman** on your `$PATH`. The library takes the
    first one it finds, in that order.
 3. **Disk headroom**:
@@ -175,9 +175,13 @@ checkout in the cache is older than this version of the library needs.
 Delete `~/.cache/colliderml/simulate/colliderml-production/` and let
 `simulate()` clone it again.
 
-**"No stages were generated"** — the pinned production-repo ref is
-missing config YAML files for the requested channel. Bump
-`COLLIDERML_PRODUCTION_REF` to a newer ref, or file an issue.
+**"... not found: the colliderml-production checkout at ..."** - the
+checkout lacks the script or the config of a stage, so it does not match
+this version of the library. Delete
+`~/.cache/colliderml/simulate/colliderml-production/` and run again.
+
+**"... already holds a run"** - `simulate()` does not write into an output
+directory that has results in it. Choose a new `output_dir`.
 
 ## Next steps
 
