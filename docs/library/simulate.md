@@ -45,8 +45,8 @@ Runs the full pipeline for one (channel, events, pileup) configuration.
 - `output_dir` defaults to
   `./colliderml_output/<channel>_pu<pileup>_<events>evt/`.
 - `seed` is forwarded to every stage. With the two-thread default, runs
-  with the same seed are not always identical: of three `ttbar-pflow-quick`
-  runs with seed 42, two gave identical tables, and the third had the same
+  with the same seed are not always identical: of four `ttbar-pflow-quick`
+  runs with seed 42, three gave identical tables, and one had the same
   generator output (`merged_events.hepmc3`) but different tables from the
   Geant4 stage on.
 - `image` is the sim image (generation, Geant4, ACTS tracking, packaging)
