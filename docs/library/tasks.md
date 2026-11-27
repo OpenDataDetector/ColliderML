@@ -155,6 +155,13 @@ beats a prior best.
 - **Higher is better**: `trackml_eff`, `physics_eff_pt1`
 - **Schema required on preds**: `event_id`, `hit_id`, `track_id`
 
+`physics_eff_pt1` is 0 unless the predictions also have a
+`majority_particle_id` column: a particle counts as found when it is the
+`majority_particle_id` of some row. The environment variables
+`COLLIDERML_TRACKING_DATASET` (e.g. `ttbar_pu0`) and
+`COLLIDERML_TRACKING_EVAL_RANGE` (`start:end`) change the dataset and the
+eval range, for example to score a small slice locally.
+
 The primary metric is TrackML weighted efficiency: the sum of hit
 weights across all correctly reconstructed tracks over the total hit
 weight. A track is "correct" when (a) a majority of its hits come

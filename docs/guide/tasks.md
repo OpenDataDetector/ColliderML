@@ -65,6 +65,13 @@ print(scores)
 # {'trackml_eff': 0.87, 'fake_rate': 0.03, 'dup_rate': 0.04, 'physics_eff_pt1': 0.92}
 ```
 
+Scoring locally downloads the truth of the whole eval range. For
+`tracking` that is the `tracker_hits` and `particles` of the last tenth of
+`ttbar_pu200`, about 150 GB. To try the workflow on a
+smaller slice, set `COLLIDERML_TRACKING_EVAL_RANGE` (for example
+`90000:90050`) before you create the task; `validate_predictions` then
+checks coverage of that range instead.
+
 ## Eval splits — "what can I train on?"
 
 Each task withholds a range of event IDs (``eval_event_range``) for

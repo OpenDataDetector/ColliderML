@@ -14,32 +14,37 @@ Or install from source:
 
 ```bash
 git clone https://github.com/OpenDataDetector/ColliderML.git
-cd colliderml
+cd ColliderML
 pip install -e .
 ```
 
 ## Loading Your First Dataset
 
-The ColliderML dataset is hosted on HuggingFace Hub and can be loaded using the standard `datasets` library:
+The ColliderML dataset is hosted on HuggingFace Hub and can be loaded using the standard `datasets` library.
+Each configuration is large (`ttbar_pu0_particles` is 223 GB in 1000 shards), so start with one shard:
 
 ```python
 from datasets import load_dataset
 
-# Load the ttbar particles dataset (no pileup)
+# Load one shard of the ttbar particles dataset (no pileup): 1000 events, 0.2 GB
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
-    "ttbar_pu0_particles",
-    split="train"
+    data_files="data/ttbar_pu0_particles/train-00000-of-01000.parquet",
+    split="train",
 )
 
 print(f"Loaded {len(dataset)} events")
 ```
 
+This prints `Loaded 1000 events`. Passing the configuration name instead
+(`load_dataset("CERN/ColliderML-Release-1", "ttbar_pu0_particles", split="train")`)
+downloads all of its shards. The examples below use `dataset` from this block.
+
 ## Prefer a local CLI + loader workflow?
 
 The HuggingFace `datasets` approach is great for quick access. For analysis workflows, ColliderML also provides a more convenient pattern:
 
-- `colliderml.load("ttbar_pu0")` — one-liner that downloads on first call, then caches
+- `colliderml.load("ttbar_pu0", max_events=200)`: one line that downloads on first call, then caches
 - explode event tables into flat tables with `colliderml.polars.explode_*`
 
 ```python
@@ -125,29 +130,21 @@ ColliderML provides multiple views of collision events:
 
 ### Loading Different Configurations
 
+The shard files of every configuration are under `data/<configuration>/`:
+
 ```python
 from datasets import load_dataset
 
-# Load truth-level particles
-particles = load_dataset(
-    "CERN/ColliderML-Release-1",
-    "ttbar_pu0_particles",
-    split="train"
-)
+def first_shard(config):
+    return load_dataset(
+        "CERN/ColliderML-Release-1",
+        data_files=f"data/{config}/train-00000-of-01000.parquet",
+        split="train",
+    )
 
-# Load tracker hits (detector measurements)
-tracker_hits = load_dataset(
-    "CERN/ColliderML-Release-1",
-    "ttbar_pu0_tracker_hits",
-    split="train"
-)
-
-# Load reconstructed tracks
-tracks = load_dataset(
-    "CERN/ColliderML-Release-1",
-    "ttbar_pu0_tracks",
-    split="train"
-)
+particles = first_shard("ttbar_pu0_particles")        # truth-level particles
+tracker_hits = first_shard("ttbar_pu0_tracker_hits")  # tracker hits (detector measurements)
+tracks = first_shard("ttbar_pu0_tracks")              # reconstructed tracks
 ```
 
 ## Accessing Event Data
@@ -224,7 +221,8 @@ for i, event in enumerate(dataset):
 
 ## Available Physics Processes
 
-ColliderML includes multiple physics processes:
+ColliderML includes multiple physics processes. These examples stream the
+events instead of downloading the configuration:
 
 ### Top Quark Pair Production (ttbar)
 
@@ -232,7 +230,8 @@ ColliderML includes multiple physics processes:
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
-    split="train"
+    split="train",
+    streaming=True,
 )
 ```
 
@@ -242,7 +241,8 @@ dataset = load_dataset(
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
     "ggf_pu0_particles",
-    split="train"
+    split="train",
+    streaming=True,
 )
 ```
 
@@ -252,7 +252,8 @@ dataset = load_dataset(
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
     "dihiggs_pu0_particles",
-    split="train"
+    split="train",
+    streaming=True,
 )
 ```
 
@@ -266,11 +267,11 @@ Here's a complete example of loading and inspecting ColliderML data:
 from datasets import load_dataset
 import numpy as np
 
-# Load dataset
+# Load one shard
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
-    "ttbar_pu0_particles",
-    split="train"
+    data_files="data/ttbar_pu0_particles/train-00000-of-01000.parquet",
+    split="train",
 )
 
 print(f"\nDataset Information:")
@@ -285,7 +286,9 @@ for key, value in event.items():
     print(f"  {key}:")
     print(f"    Type: {type(value)}")
 
-    if hasattr(value, 'shape'):
+    # Columns other than event_id hold one list per event
+    if isinstance(value, list):
+        value = np.asarray(value)
         print(f"    Shape: {value.shape}")
         print(f"    Dtype: {value.dtype}")
 
@@ -306,17 +309,24 @@ from datasets import load_dataset
 
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
-    "ttbar_pu0_particles",
-    split="train"
+    data_files="data/ttbar_pu0_particles/train-00000-of-01000.parquet",
+    split="train",
 )
 
 # Convert to PyTorch format
-dataset.set_format(type='torch', columns=['your_feature_columns'])
+dataset.set_format(type="torch", columns=["event_id", "px", "py", "pz"])
 
-# Use with PyTorch DataLoader
+# Use with PyTorch DataLoader. Events have different numbers of particles,
+# so keep each batch as a list of events instead of stacking them.
 from torch.utils.data import DataLoader
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+dataloader = DataLoader(dataset, batch_size=32, shuffle=True, collate_fn=list)
+batch = next(iter(dataloader))
+print(len(batch), batch[0]["px"].shape)
 ```
+
+With the default `collate_fn` the `DataLoader` fails on the first batch
+(`stack expects each tensor to be equal size`), because every column except
+`event_id` has a different length in each event.
 
 ### TensorFlow
 
@@ -331,15 +341,13 @@ tf_dataset = dataset.to_tf_dataset(
 
 ## Next Steps
 
-- Explore the [Data Structure](./data-structure.md) documentation for detailed field descriptions
-- Learn about [Data Management](./data-management.md) for caching and optimization
-- Check out the [Examples](../examples/) for complete analysis workflows
-- Read about the [Physics Processes](./processes.md) available in ColliderML
+- Load, explode and process the tables with the [library](/library/overview)
+- See where downloads are cached in [Cache location](/library/cli#cache-location)
+- Work through the [platform tutorial](./tutorial.md) and the [exploration notebook](https://github.com/OpenDataDetector/ColliderML/blob/main/notebooks/colliderml_loader_exploration.ipynb)
 
 ## Getting Help
 
 If you encounter issues:
 
-- Check the [FAQ](./faq.md)
 - Visit our [GitHub Issues](https://github.com/OpenDataDetector/ColliderML/issues)
 - Consult the [CERN/ColliderML-Release-1 dataset page](https://huggingface.co/datasets/CERN/ColliderML-Release-1)

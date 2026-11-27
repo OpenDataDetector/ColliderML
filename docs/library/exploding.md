@@ -7,6 +7,8 @@ ColliderML stores each object collection as an **event table**:
 
 The `colliderml.polars` helpers “explode” these list columns into a flat, object-as-row table.
 
+They take Polars frames and return pandas DataFrames.
+
 ## Recommended pattern
 
 Filter to the event(s) you care about **before** exploding:

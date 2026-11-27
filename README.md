@@ -103,8 +103,11 @@ Full docs: <https://opendatadetector.github.io/ColliderML>
 ## Development
 
 ```bash
-pytest -v -m "not integration"
+pytest -v -m "not slow and not integration and not pipeline"
 ```
+
+CI runs this selection; without `not slow` and `not pipeline`, the tests marked `sim` start real
+simulation containers when Docker or Podman is installed.
 
 Docs are built with VitePress: `npm ci --prefix docs && npm run --prefix docs docs:build`.
 

@@ -18,6 +18,10 @@ from colliderml.physics import subsample_pileup
 tables_sub = subsample_pileup(tables, target_vertices=50)
 ```
 
+`tables` is a dict of tables such as `frames` from [Loading](./loading.md).
+The filtering runs Python code per event: for 200 ttbar events without
+pile-up it took about 4 minutes and 10 GB of memory.
+
 ## Decay traversal labels
 
 Assign a per-particle label identifying the primary ancestor in the decay chain:

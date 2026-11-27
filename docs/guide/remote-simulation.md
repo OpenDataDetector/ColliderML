@@ -165,14 +165,14 @@ tables = load_tables(LoaderConfig(
 ))
 ```
 
-(After commit B4 lands, the one-liner `colliderml.load("ttbar_pu200",
-dataset_id="ColliderML/req-abc123")` will subsume all of the above.)
+`colliderml.load("ttbar_pu200", tables=["tracker_hits"], dataset_id="ColliderML/req-abc123")`
+does both steps in one call.
 
 ## Configuration
 
 | Env var | Meaning | Default |
 | :-- | :-- | :-- |
-| `COLLIDERML_BACKEND` | Backend base URL | `https://api.colliderml.com` |
+| `COLLIDERML_BACKEND` | Backend base URL | `https://colliderml-backend.onrender.com` |
 | `HF_TOKEN` | Explicit HuggingFace token (overrides hub login) | — |
 | `HUGGING_FACE_HUB_TOKEN` | Fallback env var | — |
 
@@ -194,7 +194,8 @@ ran exactly this request. The backend typically returns the existing
 dataset URL in the error detail — use that instead of re-submitting.
 
 **`Could not reach ColliderML backend`** — network, DNS, or the backend
-is down. Check the status page linked from the docs home.
+is down. `curl https://colliderml-backend.onrender.com/v1/leaderboard/tracking`
+returns `[]` or a list of entries while the backend is up.
 
 **`ImportError: The colliderml.remote client requires the 'remote' extra`**
 — run `pip install 'colliderml[remote]'`.

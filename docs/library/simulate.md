@@ -36,7 +36,7 @@ Runs the full pipeline for one (channel, events, pileup) configuration.
 **Parameter semantics**
 
 - `preset` — name of a bundled preset (see
-  [`list_presets()`](#list_presets)), or a [`Preset`](#preset-dataclass)
+  [`load_presets()`](#list_presets)), or a [`Preset`](#preset-dataclass)
   instance. Supplies defaults for `channel`, `events`, `pileup` and
   `particle_flow`.
 - Explicit `channel` / `events` / `pileup` **always win** over the preset's
