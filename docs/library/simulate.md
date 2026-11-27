@@ -271,7 +271,8 @@ for step in generate_stage_manifest("higgs_portal", prod_root=prod):
 
 ## See also
 
-- [Local Simulation guide](../guide/simulation.md) — conceptual overview
-- [Remote Simulation guide](../guide/remote-simulation.md) — SaaS variant
-- [`colliderml.load()`](./loading.md) — load the released dataset
-- [Benchmark tasks](./tasks.md) — score simulated events against a task
+- [Local Simulation guide](../guide/simulation.md): conceptual overview
+- [Particle flow tutorial](../guide/particle-flow.md): the full chain, start to finish
+- [Remote Simulation guide](../guide/remote-simulation.md): SaaS variant
+- [`colliderml.load()`](./loading.md): load the released dataset
+- [Benchmark tasks](./tasks.md): score simulated events against a task

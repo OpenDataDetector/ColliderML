@@ -25,8 +25,9 @@ shared cluster, see [Remote Simulation](./remote-simulation.md).
 | You want offline reproducibility | You want someone else to pay the compute bill |
 | You are debugging a pipeline change | You are running a benchmark |
 
-A typical iteration loop — `simulate → inspect → tweak → simulate again`
-— takes about a quarter of an hour for the `*-quick` presets.
+A typical iteration loop (`simulate → inspect → tweak → simulate again`)
+takes about a quarter of an hour for the `*-quick` presets, each time in a
+new output directory.
 
 ## Prerequisites
 
