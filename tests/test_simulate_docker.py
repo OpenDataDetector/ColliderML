@@ -80,9 +80,22 @@ def test_pull_image_pulls_what_is_missing(monkeypatch: pytest.MonkeyPatch) -> No
     assert calls == [["docker", "image", "inspect", "img:1"], ["docker", "pull", "img:1"]]
 
 
-@pytest.mark.parametrize(
-    "runtime,query", [("docker", "inspect"), ("podman", "exists"), ("podman-hpc", "exists")]
-)
+def test_check_image_available_reads_the_podman_hpc_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Migrated images are listed by podman-hpc but not found by `image exists`."""
+    listed = "ghcr.io/x/sw:pr-8 ghcr.io/x/sw@sha256:abc\nlocalhost/y/reco:1 localhost/y/reco@<none>\n"
+
+    def fake_run(cmd, **kwargs):
+        if cmd[1] == "images":
+            return subprocess.CompletedProcess(cmd, 0, stdout=listed)
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(docker_mod.subprocess, "run", fake_run)
+    for image in ("localhost/y/reco:1", "ghcr.io/x/sw:pr-8", "ghcr.io/x/sw@sha256:abc"):
+        assert docker_mod.check_image_available(image, runtime="podman-hpc") is True
+    assert docker_mod.check_image_available("localhost/y/reco:2", runtime="podman-hpc") is False
+
+
+@pytest.mark.parametrize("runtime,query", [("docker", "inspect"), ("podman", "exists")])
 def test_check_image_available_uses_the_runtime_query(
     monkeypatch: pytest.MonkeyPatch, runtime: str, query: str
 ) -> None:

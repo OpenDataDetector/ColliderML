@@ -156,9 +156,19 @@ def check_image_available(image: Optional[str] = None, *, runtime: Optional[str]
     ``image`` defaults to the pinned sim image."""
     image = image or load_pipeline_config().sim_image
     rt = runtime or get_container_runtime()
-    # `image exists` is the Podman query; it also sees podman-hpc's migrated
-    # images, which `image inspect` misses on compute nodes.
-    query = "inspect" if Path(rt).name == "docker" else "exists"
+    name = Path(rt).name
+    if name == "podman-hpc":
+        # Images migrated to the shared read-only store run and are listed, but
+        # `image exists` and `image inspect` do not find them.
+        listing = subprocess.run(
+            [rt, "images", "--format", "{{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}}"],
+            capture_output=True,
+            text=True,
+        )
+        if listing.returncode == 0 and image in listing.stdout.split():
+            return True
+    # `image exists` is the Podman query, `image inspect` the Docker one.
+    query = "inspect" if name == "docker" else "exists"
     result = subprocess.run(
         [rt, "image", query, image],
         capture_output=True,
