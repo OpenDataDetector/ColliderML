@@ -120,6 +120,7 @@ ttbar_pflow/
 │       └── pfos/                 # Pandora particle-flow objects
 ├── runs/0/                       # intermediate files of every stage (HepMC, EDM4hep, ROOT)
 ├── configs/0/                    # the stage configs this run used
+├── docker_test/                  # the compiled MadGraph process
 └── pipeline_timing.csv
 ```
 
@@ -214,7 +215,24 @@ colliderml simulate --channel ttbar --particle-flow \
 Pile-up 200 costs far more per event. We measured this command (two events,
 two threads, two Pandora processes) on the same machine:
 
-<!-- PILEUP_TABLE -->
+| Stage | Wall time | Largest process |
+| :-- | --: | --: |
+| MadGraph Init, MadGraph Generation | 8 min 10 s | 1.0 GB |
+| Pythia Generation (with the pile-up interactions) | 19 s | 0.3 GB |
+| Detector Simulation | 12 min 48 s | 11.3 GB |
+| Digitization & Reconstruction | 1 min 37 s | 7.4 GB |
+| Truth Particle Tables | 9 s | 1.0 GB |
+| Calorimeter Digitization & Particle Flow | 12 min 16 s | 5.6 GB per process |
+| Calorimeter & Particle Flow Tables | 13 s | 1.3 GB |
+| Parquet Packaging | 7 s | 1.0 GB |
+| Whole run | 37 min 49 s | |
+
+The whole run peaked at 11.5 GB of memory and wrote 1.8 GB, of which the
+tables are 160 MB. These two events have 1,500 tracks and 5,800
+particle-flow objects each.
+
+Each Pandora process used 5.6 GB here. Keep `--pandora-processes` times that
+below your free memory.
 
 ## On an HPC system with podman-hpc
 
