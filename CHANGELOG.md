@@ -6,12 +6,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-27
+
 ### Added
 - [library] `colliderml.simulate(particle_flow=True)` runs the chain past tracking: truth particle tables, calorimeter digitisation and Pandora particle flow (in a second, reco container), and the final parquet tables (`particles`, `generator_particles`, `tracker_simhits`, `tracker_hits`, `tracks`, `truth_tracks`, `vertices`, `calo_cells`, `calo_clusters`, `pfos`) under `<output_dir>/parquet/`. New preset `ttbar-pflow-quick`, new arguments `reco_image`, `threads`, `pandora_processes`, and the CLI flags `--particle-flow`, `--reco-image`, `--threads`, `--pandora-processes`.
 - [library] `SimulationResult.parquet_dir` and `SimulationResult.tables()`.
 - [library] `colliderml/simulate/pipeline_config.yaml` pins the production-repo ref and both container images in one place (`load_pipeline_config()`), with the overrides `COLLIDERML_PRODUCTION_REF`, `COLLIDERML_SIM_IMAGE`, `COLLIDERML_RECO_IMAGE`.
 - [library] `podman-hpc` is accepted as a container runtime; `colliderml simulate --runtime`.
-- [docs] Tutorial "Simulate and reconstruct ttbar with particle flow".
+- [library] The reco image is `ghcr.io/opendatadetector/colliderml-reco:20261127`, pinned by digest. It is built from `image/colliderml-reco/` in ColliderML-Production.
+- [docs] The Local Simulation guide covers the full chain: the commands, measured time, memory and disk, the output tables and the known limitations.
 
 ### Changed
 - [library] The pinned pipeline is `pipeline-v0.3.0` with the `sw:pr-8` sim image. This changes what a local simulation without particle flow writes, compared with 0.4.2:
@@ -27,6 +30,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - [library] Stages no longer have a two-hour timeout.
 
 ### Fixed
+- [library] A `colliderml-production` cache directory that is not a git checkout is left alone with an error. Before, a failed clone into it could delete it.
 - [library] `colliderml simulate` without `--image` passed `None` as the image name; it now uses the pinned image.
 - [library] `colliderml.simulate(...)` raised `TypeError: 'module' object is not callable` once anything had imported the `colliderml.simulate` subpackage; it is now callable in any import order.
 - [library] A cached production checkout that could not be switched to the requested ref was used as it was; this is now an error.
