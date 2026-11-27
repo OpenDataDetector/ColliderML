@@ -8,7 +8,7 @@ colliderml --help
 colliderml <subcommand> --help
 ```
 
-## `download` — fetch dataset shards
+## `download`: fetch dataset shards
 
 Download a subset (heuristic shard selection) for a process / pileup / object set:
 
@@ -26,14 +26,14 @@ downloaded — the Polars loader then enforces exact event selection
 locally. Data goes into `$COLLIDERML_DATA_DIR` (default
 `~/.cache/colliderml`) or wherever you point `--out`.
 
-## `list-configs` — inspect the cache or the remote repo
+## `list-configs`: inspect the cache or the remote repo
 
 ```bash
 colliderml list-configs                       # locally cached configs
 colliderml list-configs --remote              # query HuggingFace for what exists
 ```
 
-## `simulate` — run the pipeline
+## `simulate`: run the pipeline
 
 New in v0.4.0. Runs the full Pythia / MadGraph / Geant4 / ACTS
 pipeline, either locally inside a Docker or Podman container or via
@@ -79,7 +79,7 @@ See the [Local Simulation](../guide/simulation.md) and
 [Remote Simulation](../guide/remote-simulation.md) guides for the full
 story.
 
-## `list-presets` — print the bundled preset catalogue
+## `list-presets`: print the bundled preset catalogue
 
 ```bash
 colliderml list-presets
@@ -90,7 +90,7 @@ pileup, whether it runs particle flow, and description. See
 [`colliderml.simulate.load_presets`](./simulate.md#list_presets) for
 the API equivalent.
 
-## `balance` — show your credit balance
+## `balance`: show your credit balance
 
 New in v0.4.0. Queries the SaaS backend's `/v1/me` endpoint and prints
 your credit balance. Requires the `[remote]` extra and a HuggingFace
@@ -104,7 +104,7 @@ colliderml balance
 colliderml balance --json    # also print the raw /v1/me body
 ```
 
-## `status` — check a remote request
+## `status`: check a remote request
 
 New in v0.4.0. Fetches a remote simulation request's state from
 `/v1/requests/<request-id>`.

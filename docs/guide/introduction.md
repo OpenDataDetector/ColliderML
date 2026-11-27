@@ -45,4 +45,4 @@ ColliderML is built on several key principles:
 
 - [Installation Guide](./installation.md) - Get ColliderML up and running
 - [Quick Start](./quickstart.md) - Start using ColliderML in minutes
-- [Core Concepts](./data-management.md) - Learn about the fundamental concepts 
+- [Library Overview](/library/overview) - Loading, exploding and the physics utilities 
