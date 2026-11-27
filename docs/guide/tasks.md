@@ -116,8 +116,8 @@ overfit on it) and awards credits on new bests.
 Each task ships a simple reference baseline you can run as a module:
 
 ```bash
-# CKF baseline for the tracking task — converts a pipeline run's
-# tracksummary_ambi.root into the task's expected parquet schema.
+# CKF baseline for the tracking task: converts the tracks table of a
+# `colliderml simulate` run into the task's parquet schema.
 python -m colliderml.tasks.tracking.baselines.ckf \
     --run-dir ./colliderml_output/ttbar_pu200_100evt/runs/0 \
     --output ckf_preds.parquet

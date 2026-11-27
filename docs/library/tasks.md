@@ -233,7 +233,7 @@ modules:
 
 | Baseline | Module | Dependency | Purpose |
 | :-- | :-- | :-- | :-- |
-| CKF (tracking) | `colliderml.tasks.tracking.baselines.ckf` | — | Converts a pipeline run's tracksummary into the task's schema |
+| CKF (tracking) | `colliderml.tasks.tracking.baselines.ckf` | none | Converts the tracks table of a `colliderml simulate` run into the task's schema, with `majority_particle_id` |
 | GBDT (jets) | `colliderml.tasks.jets.baselines.bdt` | scikit-learn | Shallow gradient-boosted trees on per-event kinematics |
 | IsoForest (anomaly) | `colliderml.tasks.anomaly.baselines.isoforest` | scikit-learn | Unsupervised anomaly detection on per-event features |
 
