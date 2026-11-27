@@ -19,5 +19,6 @@ production_ref: "pipeline-v0.3.0"
 sim_image: "ghcr.io/opendatadetector/sw@sha256:31dc28312308e87d7406c1b494b1eed46e6ae743c3dc9f9bb239e45e9bc5f08c"
 
 # Calorimeter digitisation and Pandora particle flow. Only pulled for
-# particle_flow=True runs.
-reco_image: "ghcr.io/opendatadetector/colliderml-reco:2026-11"
+# particle_flow=True runs. This is colliderml-reco:20261127, pinned by digest
+# (recipe: image/colliderml-reco/ in the production repository).
+reco_image: "ghcr.io/opendatadetector/colliderml-reco@sha256:8ff91c13f21353ff04ee6924427a61dd3df523afa06b652072f7420efea24dd9"
