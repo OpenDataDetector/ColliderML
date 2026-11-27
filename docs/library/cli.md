@@ -75,8 +75,7 @@ Options:
 | `--runtime <name>` | `docker`, `podman-hpc` or `podman`. Default: the first one found, in that order. |
 | `--quiet` | Suppress per-stage progress messages. |
 
-See the [Local Simulation](../guide/simulation.md),
-[Particle flow tutorial](../guide/particle-flow.md) and
+See the [Local Simulation](../guide/simulation.md) and
 [Remote Simulation](../guide/remote-simulation.md) guides for the full
 story.
 

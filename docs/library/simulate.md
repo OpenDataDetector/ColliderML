@@ -51,8 +51,8 @@ Runs the full pipeline for one (channel, events, pileup) configuration.
 - `particle_flow=True` continues after tracking: truth particle tables,
   calorimeter digitisation and Pandora particle flow, and the final
   parquet tables under `<output_dir>/parquet/`. The default is the
-  preset's setting, or `False` without a preset. See the
-  [particle flow tutorial](../guide/particle-flow.md).
+  preset's setting, or `False` without a preset. See
+  [Local Simulation](../guide/simulation.md#run-the-full-chain).
 - `threads` sets the Geant4 and ACTS threads, `pandora_processes` the
   number of concurrent Pandora processes. `threads` defaults to 2, the
   minimum (with one thread the Geant4 step of the pinned sim image writes
@@ -274,8 +274,7 @@ for step in generate_stage_manifest("higgs_portal", prod_root=prod):
 
 ## See also
 
-- [Local Simulation guide](../guide/simulation.md): conceptual overview
-- [Particle flow tutorial](../guide/particle-flow.md): the full chain, start to finish
+- [Local Simulation guide](../guide/simulation.md): running the full chain, start to finish
 - [Remote Simulation guide](../guide/remote-simulation.md): SaaS variant
 - [`colliderml.load()`](./loading.md): load the released dataset
 - [Benchmark tasks](./tasks.md): score simulated events against a task

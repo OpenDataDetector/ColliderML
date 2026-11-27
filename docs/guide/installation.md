@@ -52,9 +52,9 @@ pip install "colliderml[dev]"
 
 The `sim` extra pulls in only the Python dependencies required to drive
 the container runtime — the actual container image and supporting data
-are fetched on first use of `colliderml.simulate()`. See
-[Local Simulation](./simulation.md) for the full story and disk-space
-expectations.
+are fetched on first use of `colliderml.simulate()`, about 40 GB with
+particle flow. See [Local Simulation](./simulation.md) for how to run the
+full chain and what it needs.
 
 The `remote` extra installs the `requests` library and gives you
 `colliderml.remote.submit`, `status`, `balance`, and the integrated

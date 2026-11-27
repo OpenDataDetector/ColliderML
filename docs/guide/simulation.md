@@ -1,192 +1,366 @@
 # Local Simulation
 
-ColliderML can generate new events on your own machine using the full
-physics pipeline: Pythia (or MadGraph + Pythia for NLO processes) →
-Geant4 detector simulation via DDSim → digitisation and track
-reconstruction via ACTS, which writes the parquet outputs directly. Everything runs inside the
-official OpenDataDetector software container, so you do not need to
-install any HEP tooling yourself — just Docker or Podman.
+ColliderML can generate new events on your own machine with the same chain
+that produced the released dataset:
 
-The chain can also continue past tracking, with calorimeter digitisation
-and Pandora particle flow in a second container. The
-[particle flow tutorial](./particle-flow.md) walks through that run from
-start to finish.
+1. MadGraph and Pythia8 generate the events (Pythia8 alone for the Pythia-only channels).
+2. Geant4 simulates the Open Data Detector (ODD), through DDSim.
+3. ACTS digitises the tracker, finds and fits tracks, and reconstructs primary vertices.
+4. The calorimeter hits are digitised and Pandora builds clusters and particle-flow objects.
+5. Everything is written as parquet tables with the layout of the released dataset.
 
-This page covers the **local** story: running the pipeline on your own
-workstation or a shared node. If you would rather hand the work off to a
-shared cluster, see [Remote Simulation](./remote-simulation.md).
+Every stage runs in a container: steps 1 to 3 in the OpenDataDetector
+software image, step 4 in the ColliderML reconstruction image. You need
+Python and Docker or Podman, and no physics software of your own.
+
+You can stop after step 3 (tracking only), which skips the reconstruction
+image and is quicker to set up.
+
+This page covers running the chain on your own workstation or on a node of
+a shared cluster. To hand the work to the ColliderML backend instead, see
+[Remote Simulation](./remote-simulation.md).
 
 ## When to run locally
 
 | Use local simulation when | Use remote simulation when |
 | :-- | :-- |
-| You want tight iteration on a few events | You need >100 events with pileup |
-| You have Docker / Podman + ~10 GB free disk (~40 GB with particle flow) | You do not have a container runtime |
+| You want tight iteration on a few events | You need >100 events with pile-up |
+| You have Docker or Podman and the disk space below | You do not have a container runtime |
 | You want offline reproducibility | You want someone else to pay the compute bill |
-| You are debugging a pipeline change | You are running a benchmark |
+| You need particle flow (remote runs stop after tracking) | You only need tracks |
 
-A typical iteration loop (`simulate → inspect → tweak → simulate again`)
-takes about a quarter of an hour for the `*-quick` presets, each time in a
-new output directory.
+## What you need
 
-## Prerequisites
+| | |
+| :-- | :-- |
+| Software | Python 3.10 or newer, `git`, and Docker, Podman or `podman-hpc` (see [HPC systems](#on-an-hpc-system-with-podman-hpc)) |
+| CPU | x86-64 with AVX2. ARM machines, Apple Silicon included, are not supported |
+| Disk | About 40 GB with particle flow: the two images take 6 GB and 27 GB once unpacked, the Geant4 data 2 GB, and ten events without pile-up 0.4 GB. Tracking only: about 9 GB |
+| Memory | Ten events without pile-up used at most 2.3 GB. Pile-up needs much more, see [below](#more-events-more-pile-up) |
+| Network | For the first run, to download the images, the pipeline code and the Geant4 data. Later runs reuse the local copies |
 
-1. **Python 3.10 or newer** — see [Installation](./installation.md) — and `git`.
-2. **Docker, podman-hpc or Podman** on your `$PATH`. The library takes the
-   first one it finds, in that order.
-3. **Disk headroom**:
-   - ~6 GB for the OpenDataDetector software image (pulled once)
-   - ~27 GB for the reconstruction image, only if you run particle flow
-   - ~2 GB for the Geant4 physics data tables (downloaded on first run)
-   - 50 MB to a few hundred MB per run, depending on event count
-4. The simulate extras installed:
-   ```bash
-   pip install "colliderml[sim]"
-   ```
+The timings and memory numbers on this page come from one machine (a node of
+NERSC Perlmutter, AMD EPYC 7763, with `podman-hpc`). They show what to
+expect; they are not tested minimum requirements.
 
-## The first run, annotated
+## Install
 
-```python
-import colliderml
-
-result = colliderml.simulate(preset="ttbar-quick")
-print(result.run_dir)
-print([p.name for p in result.list_files()])
+```bash
+pip install "colliderml[sim]"
 ```
 
-On first invocation, `simulate()` will:
+Particle flow needs `colliderml` 0.5.0 or later: `colliderml list-presets`
+must show `ttbar-pflow-quick`.
 
-1. **Detect the container runtime** (`docker`, `podman-hpc` or `podman`). If none is
-   available you get a clear error pointing at
-   [Remote Simulation](./remote-simulation.md) instead.
-2. **Prompt before pulling** the ~6 GB container image (skipped in
-   non-interactive environments; pass `image="..."` to override the
-   pinned image).
-3. **Clone `colliderml-production`** into
-   `~/.cache/colliderml/simulate/colliderml-production/`. This repo holds
-   the stage scripts, YAML config templates, and container bootstrap
-   script. It is pinned to a known-good git ref for reproducibility.
-4. **Download the Geant4 physics tables** (~2 GB) into the same cache
-   directory, from inside the container. The detector geometry and the
-   MadGraph/Pythia bridge are part of the image.
-5. **Run each pipeline stage** in order. Progress is printed to stdout.
-   For `ttbar-quick`, the first stage (MadGraph Init) is the longest: it
-   took 6 to 8 minutes in our tests, the detector simulation of 10 events
-   about 2.5 minutes.
-6. **Return a `SimulationResult`** with paths to the outputs.
+## Run the full chain
 
-Everything cached in step 2–4 persists between runs, so the *second*
-invocation skips straight to step 5 and starts producing events
-immediately.
+```bash
+colliderml simulate --preset ttbar-pflow-quick --output ./ttbar_pflow
+```
+
+or from Python:
+
+```python
+from colliderml.simulate import simulate
+
+result = simulate(preset="ttbar-pflow-quick", output_dir="./ttbar_pflow")
+print(result.parquet_dir)
+```
+
+This runs ten ttbar events without pile-up. The stages are printed as they run:
+
+```
+Running ttbar pipeline (10 events, pileup=0, particle flow) ...
+  [1/9] MadGraph Init ...
+  [2/9] MadGraph Generation ...
+  [3/9] Pythia Generation ...
+  [4/9] Detector Simulation ...
+  [5/9] Digitization & Reconstruction ...
+  [6/9] Truth Particle Tables ...
+  [7/9] Calorimeter Digitization & Particle Flow ...
+  [8/9] Calorimeter & Particle Flow Tables ...
+  [9/9] Parquet Packaging ...
+Done.
+```
+
+The output directory must be new: `simulate` stops if it already holds a run.
+
+For tracking only, leave out particle flow:
+
+```bash
+colliderml simulate --preset ttbar-quick --output ./ttbar_tracks
+```
+
+This stops after stage 5 and does not need the reconstruction image.
+
+## What happens on the first run
+
+1. The container runtime is detected: `docker`, then `podman-hpc`, then
+   `podman`. `--runtime` (or `runtime=`) chooses one.
+2. You are asked before each image is pulled. In a non-interactive session
+   the pull goes ahead.
+3. The pipeline code (`colliderml-production`) is cloned into
+   `~/.cache/colliderml/simulate/`, at the version this release of the
+   library is pinned to.
+4. The Geant4 physics data (about 2 GB) is downloaded into the same cache.
+5. The stages run, and a `SimulationResult` with the output paths is returned.
+
+Steps 2 to 4 happen once; later runs start with the stages.
+
+## How long it takes
+
+`ttbar-pflow-quick` uses two threads for Geant4 and ACTS and one Pandora
+process. With the images and the Geant4 data already in place:
+
+| Stage | Wall time | Largest process |
+| :-- | --: | --: |
+| MadGraph Init | 6 min 36 s | 1.0 GB |
+| MadGraph Generation | 15 s | 0.4 GB |
+| Pythia Generation | 1 s | 0.3 GB |
+| Detector Simulation | 2 min 23 s | 2.2 GB |
+| Digitization & Reconstruction | 17 s | 1.7 GB |
+| Truth Particle Tables | 3 s | 0.5 GB |
+| Calorimeter Digitization & Particle Flow | 38 s | 1.9 GB |
+| Calorimeter & Particle Flow Tables | 7 s | 0.5 GB |
+| Parquet Packaging | 3 s | 0.8 GB |
+| Whole run, container start-up included | 12 min 24 s | |
+
+MadGraph Init compiles and integrates the NLO process. Its cost does not
+depend on the number of events, so it is half of a ten-event run and a small
+part of a large one. It uses every core it finds (128 on the test machine),
+so expect it to take longer on a laptop.
+
+Wall time and peak memory of every stage of your own run are written to
+`<output>/pipeline_timing.csv`.
+
+## What comes out
+
+```
+ttbar_pflow/
+├── parquet/
+│   ├── truth/
+│   │   ├── particles/            # every particle of the event (generator and Geant4)
+│   │   ├── generator_particles/  # generator history of the hard scatter
+│   │   └── tracker_simhits/      # Geant4 tracker hits
+│   └── reco/
+│       ├── tracker_hits/         # digitised tracker clusters
+│       ├── tracks/               # ACTS tracks (CKF, ambiguity-resolved)
+│       ├── truth_tracks/         # tracks fitted on truth-assigned hits
+│       ├── vertices/             # primary vertices (AMVF)
+│       ├── calo_cells/           # digitised calorimeter cells
+│       ├── calo_clusters/        # Pandora clusters
+│       └── pfos/                 # Pandora particle-flow objects
+├── runs/0/                       # intermediate files of every stage (HepMC, EDM4hep, ROOT)
+├── configs/0/                    # the stage configs this run used
+├── docker_test/                  # the compiled MadGraph process
+└── pipeline_timing.csv
+```
+
+A tracking-only run has `particles`, `tracker_simhits`, `tracker_hits`,
+`tracks` and `truth_tracks`, in `runs/0/`.
+
+For ten events without pile-up the tables take 17 MB, the intermediate
+files 173 MB and the MadGraph process 230 MB. Only `parquet/` is needed for
+analysis.
+
+Each table has one row per event. Every column except `event_id` is a list
+with one entry per object. The tables are linked by ids within an event:
+
+| From | Column | Points to |
+| :-- | :-- | :-- |
+| `tracks` | `hit_ids` | position in the event's `tracker_hits` lists (0-based) |
+| `tracks` | `majority_particle_id` | `particles.particle_id` |
+| `tracker_hits` | `particle_ids` | `particles.particle_id` |
+| `pfos` | `track_ids` | `tracks.track_id` |
+| `pfos` | `cluster_ids` | `calo_clusters.cluster_id` |
+| `calo_clusters` | `cell_ids` | `calo_cells.cell_id` |
+| `calo_cells` | `contrib_particle_ids` | `particles.particle_id` |
+
+When you join:
+
+- A track without a majority particle has `majority_particle_id = 2**64 - 1`.
+- `generator_particles` is a subset of `particles` with the same
+  `particle_id`: the particles of the hard scatter that the generator
+  produced before the final state (the tops, the W bosons, the showers).
+- `color_a` and `color_b` are 0 for every particle: the simulation output
+  carries no colour-flow information.
+
+`colliderml.load()` reads only the released dataset. Read your own tables with `pyarrow` or `pandas`. Here we count
+the particle-flow objects and tracks per event:
+
+```python
+import numpy as np
+import pandas as pd
+import pyarrow.parquet as pq
+from pathlib import Path
+
+parquet = Path("ttbar_pflow/parquet")
+pfos = pq.read_table(next((parquet / "reco/pfos").glob("*.parquet"))).to_pandas()
+tracks = pd.read_parquet(next((parquet / "reco/tracks").glob("*.parquet")), columns=["event_id", "track_id"])
+
+pfos["n_pfos"] = pfos["pfo_id"].str.len()
+pfos["n_charged"] = pfos["charge"].apply(lambda q: int(np.count_nonzero(q)))
+pfos["pt_sum"] = [np.hypot(px, py).sum() for px, py in zip(pfos["px"], pfos["py"])]
+summary = pfos[["event_id", "n_pfos", "n_charged", "pt_sum"]].merge(
+    tracks.assign(n_tracks=tracks["track_id"].str.len())[["event_id", "n_tracks"]], on="event_id")
+print(summary)
+```
+
+Our test run printed (momenta in GeV):
+
+```
+   event_id  n_pfos  n_charged      pt_sum  n_tracks
+0         0     199         28  286.083862        29
+1         1     232         56  345.497101        56
+2         2     236         46  314.021729        46
+3         3     120         28  419.020050        28
+4         4     204         47  350.671509        48
+5         5     204         50  328.044983        51
+6         6     276         66  531.719971        66
+7         7     283         64  474.373596        64
+8         8     206         38  389.224915        38
+9         9     187         32  378.065125        33
+```
+
+`SimulationResult.tables()` returns the same files by table name.
+
+## More events, more pile-up
+
+```bash
+colliderml simulate --channel ttbar --particle-flow \
+    --events 100 --pileup 0 --threads 8 --pandora-processes 8 \
+    --output ./ttbar_100
+```
+
+`--threads` sets the Geant4 and ACTS threads (2 or more). `--pandora-processes`
+splits the Pandora stage into that many processes, each on a slice of the
+events.
+
+Pile-up is the mean number of extra proton-proton interactions overlaid on
+each event. The released ColliderML pile-up samples use 200:
+
+```bash
+colliderml simulate --channel ttbar --particle-flow \
+    --events 2 --pileup 200 --threads 2 --pandora-processes 2 \
+    --output ./ttbar_pu200
+```
+
+We measured this command on the same machine:
+
+| Stage | Wall time | Largest process |
+| :-- | --: | --: |
+| MadGraph Init, MadGraph Generation | 8 min 10 s | 1.0 GB |
+| Pythia Generation (with the pile-up interactions) | 19 s | 0.3 GB |
+| Detector Simulation | 12 min 48 s | 11.3 GB |
+| Digitization & Reconstruction | 1 min 37 s | 7.4 GB |
+| Truth Particle Tables | 9 s | 1.0 GB |
+| Calorimeter Digitization & Particle Flow | 12 min 16 s | 5.6 GB per process |
+| Calorimeter & Particle Flow Tables | 13 s | 1.3 GB |
+| Parquet Packaging | 7 s | 1.0 GB |
+| Whole run | 37 min 49 s | |
+
+The run wrote 1.8 GB, of which the tables are 160 MB. These two events have
+1,500 tracks and 5,800 particle-flow objects each. A Pandora process needs
+up to 5.6 GB for one pile-up 200 event, so keep `--pandora-processes` times
+that below your free memory.
 
 ## Presets versus explicit parameters
 
 Presets are named shorthand for common workloads:
 
 ```python
-# Preset: bundled (channel, events, pileup) triple.
-colliderml.simulate(preset="ttbar-quick")
+from colliderml.simulate import simulate
+
+# Preset: channel, events, pile-up and particle flow in one name.
+simulate(preset="ttbar-pflow-quick")
 
 # Explicit parameters.
-colliderml.simulate(channel="higgs_portal", events=10, pileup=10)
+simulate(channel="higgs_portal", events=10, pileup=10, particle_flow=True)
 
-# Preset as a starting point, but bump pileup:
-colliderml.simulate(preset="ttbar-quick", pileup=40)
+# A preset as a starting point, with more pile-up:
+simulate(preset="ttbar-pflow-quick", pileup=40, output_dir="./ttbar_pu40")
 ```
 
-Explicit arguments always win over the preset's defaults. List the full
-preset catalogue on the CLI:
+Explicit arguments win over the preset. `colliderml list-presets` lists them.
 
-```bash
-colliderml list-presets
-```
+## On an HPC system with podman-hpc
 
-## What comes out
+Where the runtime is `podman-hpc` (NERSC Perlmutter, for example):
 
-`SimulationResult.run_dir` points at a per-run directory (e.g.
-`colliderml_output/ttbar_pu0_10evt/runs/0/`) containing:
+1. Pull the images on a login node before you start. `podman-hpc pull` also
+   makes an image visible to the compute nodes; for an image you built or
+   loaded yourself, run `podman-hpc migrate <image>`. The image names are
+   the `sim_image` and `reco_image` values printed by
+   `python -c "from colliderml.simulate import load_pipeline_config as c; print(c())"`.
+2. Run the simulation on a compute node, one simulation per job step. Two
+   job steps that started containers of the same image at the same time
+   failed in our test.
+3. Put the cache on a file system that handles many small files well. The
+   Geant4 data is about 43,000 files, and copying it to a parallel file
+   system took 28 minutes in our test. Set `COLLIDERML_CACHE` to a
+   node-local or scratch directory.
 
-| File | Stage | Format |
-| :-- | :-- | :-- |
-| `../all/0/events.hepmc.gz` | MadGraph (ttbar only; next to the run directory) | HepMC2 |
-| `merged_events.hepmc3` | Pythia + pileup | HepMC3 |
-| `edm4hep.root` | DDSim / Geant4 | EDM4hep ROOT |
-| `measurements.root` | Digitisation | ACTS ROOT |
-| `particles.root` | Truth particles | ACTS ROOT |
-| `tracksummary_ambi.root` | Reconstruction | ACTS ROOT |
-| `particles/`, `tracker_simhits/` | Truth particles, Geant4 tracker hits | Parquet |
-| `tracker_hits/`, `tracks/`, `truth_tracks/` | Digitised clusters, CKF tracks, truth-seeded tracks | Parquet |
+## Cache layout
 
-The parquet files are in the run directory, one folder per table. Read
-them with `pyarrow` or `pandas` directly: `colliderml.load()` reads the
-released dataset from the download cache and does not look at a
-simulation output directory. The
-[particle flow tutorial](./particle-flow.md#what-comes-out) has an example.
-
-## Cache layout and disk hygiene
-
-Everything is rooted at `$COLLIDERML_CACHE` (defaults to
-`~/.cache/colliderml/`):
+Everything is under `$COLLIDERML_CACHE` (default `~/.cache/colliderml/`):
 
 ```
 ~/.cache/colliderml/simulate/
-├── colliderml-production/          # pinned production-repo clone
+├── colliderml-production/          # pinned clone of the pipeline code
 └── container_cache/
-    └── g4data/                     # Geant4 physics tables (~2 GB)
+    └── g4data/                     # Geant4 physics data (~2 GB)
 ```
 
-Wipe the whole tree at any time — `simulate()` will re-populate it on
-the next run. If a stage complains that a cache is corrupt, call
-`colliderml.simulate.docker.clone_colliderml_production(force_refresh=True)`
-to re-fetch just the production-repo clone.
+You can delete the tree at any time; the next run fills it again. To fetch
+only the pipeline code again, call
+`colliderml.simulate.docker.clone_colliderml_production(force_refresh=True)`.
 
 ## Overriding the pinned pipeline versions
 
-The `colliderml-production` ref and the two container images are pinned
-together in one file,
+The `colliderml-production` version and the two container images are pinned
+together in
 [`colliderml/simulate/pipeline_config.yaml`](../library/simulate.md#pinned-pipeline-versions).
 Each has an environment variable override: `COLLIDERML_PRODUCTION_REF`,
-`COLLIDERML_SIM_IMAGE` and `COLLIDERML_RECO_IMAGE`. To point at an in-flight
-branch of the production repo without editing the library:
+`COLLIDERML_SIM_IMAGE` and `COLLIDERML_RECO_IMAGE`. To run a branch of the
+pipeline code without editing the library:
 
 ```bash
 export COLLIDERML_PRODUCTION_REF=my-feature-branch
-python -c "import colliderml; colliderml.simulate(preset='ttbar-quick')"
+colliderml simulate --preset ttbar-quick --output ./test
 ```
 
-This is the supported escape hatch for pipeline developers working on
-both repos at once; end users should stick with the pinned default.
+This is meant for pipeline developers; for anything you want to compare with
+the released data, keep the pinned versions.
+
+## Known limitations
+
+| Limitation | What it means for you |
+| :-- | :-- |
+| No vertex-to-track links with the public sim image | `reco/vertices` has the vertex positions, covariances and track counts. The columns `track_ids`, `track_weights`, `truth_interaction` and `truth_interaction_dz` need an ACTS writer that the public image does not have yet |
+| Simpler ttbar process than the released samples | This pipeline generates `p p > t t~` at NLO without extra jets; the released samples use FxFx-merged multi-jet matrix elements. Our ten events have fewer tracks and particle-flow objects per event than the released-format sample (46 and 215 against 62 and 268) |
+| x86-64 only | There are no ARM builds of either image |
+| One run per output directory, one file per table | For more than a few hundred events with pile-up, make several calls with different `seed` and `output_dir` |
+| Two threads at least | With one thread the Geant4 step of the current sim image writes every event twice, so `--threads 1` is refused |
+| `truth/particles` at pile-up | Every particle of the event is in the table, with 30 columns, at any pile-up. The released pile-up 200 sample has the 18-column Release 1 particle table there |
+| No remote particle flow | `remote=True` stops after tracking |
+| Docker writes files as root | With Docker (not Podman) the output belongs to root: `sudo chown -R $USER ./ttbar_pflow` |
 
 ## Troubleshooting
 
-**"No container runtime on PATH"** - install Docker or Podman, or
-run remotely with `simulate(..., remote=True)`.
+| Message | What to do |
+| :-- | :-- |
+| `No container runtime on PATH` | Install Docker or Podman, or run remotely with `simulate(..., remote=True)` |
+| `daemon is not responding` | Start Docker Desktop on macOS and Windows, or the `dockerd` service on Linux; `docker info` shows whether it runs |
+| The first run stays at `Pulling ...` | The images are 6 GB and 27 GB. Let the pull finish; later runs reuse them |
+| `... has no scripts/cli/docker_stage_env.sh`, or `... not found: the colliderml-production checkout at ...` | The cached pipeline code does not match this version of the library. Delete `~/.cache/colliderml/simulate/colliderml-production/` and run again |
+| `... already holds a run` | `simulate()` does not write into an output directory that has results in it. Choose a new `output_dir` |
 
-**"daemon is not responding"** — Docker Desktop needs to be running (on
-macOS/Windows) or the `dockerd` service needs to be up (on Linux). Try
-`docker info` from a shell to confirm.
-
-**First run gets stuck on "Pulling …"** - the OpenDataDetector image is
-~6 GB and the reconstruction image ~27 GB. Check your connection and let
-it finish; subsequent runs reuse the cached images.
-
-**"... has no scripts/cli/docker_stage_env.sh"** - the production
-checkout in the cache is older than this version of the library needs.
-Delete `~/.cache/colliderml/simulate/colliderml-production/` and let
-`simulate()` clone it again.
-
-**"... not found: the colliderml-production checkout at ..."** - the
-checkout lacks the script or the config of a stage, so it does not match
-this version of the library. Delete
-`~/.cache/colliderml/simulate/colliderml-production/` and run again.
-
-**"... already holds a run"** - `simulate()` does not write into an output
-directory that has results in it. Choose a new `output_dir`.
+If a stage fails, send us the stage name, its error output and
+`<output>/pipeline_timing.csv` if it exists.
 
 ## Next steps
 
-- Run the full chain with particle flow: [Particle flow tutorial](./particle-flow.md)
-- Run the CLI equivalent: [`colliderml simulate`](../library/cli.md#simulate)
-- Look up the `simulate()` signature: [Simulate API](../library/simulate.md)
-- Pipe the outputs into a benchmark: [Benchmark Tasks](./tasks.md)
-- Offload heavy runs: [Remote Simulation](./remote-simulation.md)
+- All `simulate()` arguments: [Simulate API](../library/simulate.md)
+- The CLI equivalent: [`colliderml simulate`](../library/cli.md#simulate-run-the-pipeline)
+- Use the outputs in a benchmark: [Benchmark Tasks](./tasks.md)
+- Run on the ColliderML backend: [Remote Simulation](./remote-simulation.md)

@@ -59,16 +59,17 @@ See the [Library overview](/library/overview), then:
 
 ## Generate events yourself
 
-New in v0.4.0. Instead of downloading pre-generated data, you can
-simulate your own events locally (inside the ODD software container
-via Docker or Podman) or submit a job to the SaaS backend:
+Instead of downloading pre-generated data, you can run the full
+ColliderML chain yourself (generation, Geant4, tracking and Pandora
+particle flow, in containers with Docker or Podman), or submit a job to
+the ColliderML backend:
 
 ```python
 import colliderml
 
 # Local: needs `pip install "colliderml[sim]"` plus Docker or Podman.
-result = colliderml.simulate(preset="ttbar-quick")
-print(result.run_dir)                       # parquet outputs land here
+result = colliderml.simulate(preset="ttbar-pflow-quick", output_dir="./ttbar_pflow")
+print(result.parquet_dir)                   # the parquet tables land here
 
 # Remote: needs `pip install "colliderml[remote]"` and an HF token.
 result = colliderml.simulate(preset="higgs-portal-quick", remote=True)
