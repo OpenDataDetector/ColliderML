@@ -76,7 +76,7 @@ Runs the full pipeline for one (channel, events, pileup) configuration.
   auto-clone behaviour.
 - `runtime` forces a container runtime (`"docker"`, `"podman"` or
   `"podman-hpc"`); auto-detected otherwise.
-- `quiet=True` suppresses per-stage progress messages.
+- `quiet=True` suppresses per-stage progress messages; the logs of the stages themselves are still printed.
 
 **Errors**
 
