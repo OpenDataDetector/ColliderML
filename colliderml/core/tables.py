@@ -49,7 +49,17 @@ def collect_tables(tables: Mapping[str, PolarsTable], streaming: bool = False) -
     """
     out: Dict[str, pl.DataFrame] = {}
     for name, t in tables.items():
-        out[name] = t.collect(streaming=streaming) if isinstance(t, pl.LazyFrame) else t
+        out[name] = _collect(t, streaming) if isinstance(t, pl.LazyFrame) else t
     return out
+
+
+def _collect(lf: pl.LazyFrame, streaming: bool) -> pl.DataFrame:
+    # Polars 2.0 removed ``collect(streaming=...)``; ``engine="streaming"`` replaces it.
+    if not streaming:
+        return lf.collect()
+    try:
+        return lf.collect(engine="streaming")
+    except TypeError:  # Polars older than ``engine=``
+        return lf.collect(streaming=True)
 
 
