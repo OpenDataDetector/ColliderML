@@ -35,6 +35,9 @@ Typical use::
 
 from __future__ import annotations
 
+import sys
+import types
+
 from colliderml.simulate.api import SimulationResult, simulate
 from colliderml.simulate.config import PipelineConfig, load_pipeline_config
 from colliderml.simulate.presets import (
@@ -43,6 +46,17 @@ from colliderml.simulate.presets import (
     load_presets,
     resolve_preset,
 )
+
+class _CallableModule(types.ModuleType):
+    """Lets ``colliderml.simulate(...)`` work whether the name resolves to the
+    function (first attribute access on ``colliderml``) or to this subpackage
+    (after anything imported ``colliderml.simulate``)."""
+
+    def __call__(self, *args, **kwargs):
+        return simulate(*args, **kwargs)
+
+
+sys.modules[__name__].__class__ = _CallableModule
 
 __all__ = [
     "simulate",

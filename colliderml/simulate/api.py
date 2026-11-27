@@ -16,6 +16,7 @@ coordinates, prints progress, and wraps results in a user-friendly object.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -36,8 +37,7 @@ from colliderml.simulate.presets import Preset, resolve_preset
 class SimulationResult:
     """The outcome of a successful :func:`simulate` call.
 
-    Wraps enough metadata to inspect the run and lazily load its tabular
-    outputs via :func:`colliderml.load`.
+    Wraps enough metadata to inspect the run and find its output files.
 
     Attributes:
         channel: Physics channel that was simulated.
@@ -83,10 +83,12 @@ class SimulationResult:
         """Final parquet files of a particle-flow run, by table name.
 
         Returns:
-            Mapping such as ``{"pfos": [...], "tracks": [...]}``; empty if
-            :attr:`parquet_dir` does not exist.
+            Mapping such as ``{"pfos": [...], "tracks": [...]}``; empty for a
+            run without particle flow.
         """
         found: Dict[str, List[Path]] = {}
+        if not self.particle_flow:
+            return found
         for path in sorted(self.parquet_dir.glob("*/*/*.parquet")):
             found.setdefault(path.parent.name, []).append(path)
         return found
@@ -99,10 +101,17 @@ class SimulationResult:
         )
 
 
+#: Where the per-run stage configs are written, inside the output directory.
+OVERLAY_SUBDIR = "configs"
+
+_RUN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
 def _apply_runtime_overrides(
     manifest: list,
     *,
     prod_root: Path,
+    output_dir: Path,
     run_id: str,
     events: int,
     pileup: int,
@@ -110,7 +119,7 @@ def _apply_runtime_overrides(
     threads: Optional[int] = None,
     pandora_processes: Optional[int] = None,
 ) -> list:
-    """Write per-run YAML overlays so the caller's kwargs actually take effect.
+    """Write per-run stage configs so the caller's kwargs actually take effect.
 
     Each stage in the manifest points at a static YAML config under
     ``prod_root/configs_development/docker_test/<channel>/`` with hardcoded
@@ -120,25 +129,30 @@ def _apply_runtime_overrides(
       2. Overrides the keys below with the caller's values, only where the
          key already exists in the YAML (we do not add fields a stage script
          does not know about) and the value is not ``None``.
-      3. Writes the modified YAML to
-         ``prod_root/.overlays/<run_id>/<stage>__<original_basename>``.
-      4. Returns a manifest with each entry's ``config_path`` rewritten
-         to point at the overlay.
+      3. Writes the result to
+         ``<output_dir>/configs/<run_id>/<stage>__<original_basename>``.
+      4. Returns a manifest whose ``config_path`` entries are the container
+         paths of those files (``/output/configs/...``).
 
-    Keys: ``events``, ``pileup``, ``seed``, ``threads``, ``processes`` (the
-    Pandora stage's process count) and, for the packaging stage, ``run_size``
-    and ``chunk_size``, both set to ``events`` because the one run holds all
-    events and they go into one file per table.
+    Keys: ``events`` (left alone where the config says ``-1``, "all events of
+    the input file"), ``pileup``, ``seed``, ``threads``, ``processes`` (the
+    Pandora stage's process count), ``run_size`` and ``chunk_size`` (packaging;
+    both set to ``events``, because the one run holds all events and they go
+    into one file per table) and ``hard_scatter_file`` (where the MadGraph
+    stage left its output for this ``run_id``).
 
-    The overlay path stays under ``prod_root`` so the existing
-    ``--config /workspace/<config_path>`` in ``run_stage`` keeps working
-    unchanged. ``run_id`` namespacing lets concurrent runs coexist.
+    The configs sit in the output directory, so two runs with different
+    output directories never share a file, and the configs a run used stay
+    next to its results.
     """
     import yaml
 
-    overlay_root = prod_root / ".overlays" / run_id
+    overlay_root = output_dir / OVERLAY_SUBDIR / run_id
     overlay_root.mkdir(parents=True, exist_ok=True)
 
+    # madgraph_gen.py stages its unsplit output under runs/all/<run>/ for a
+    # numeric run id and in the run directory itself otherwise.
+    hard_scatter_dir = f"all/{run_id}" if run_id.isdigit() else run_id
     overrides = {
         "events": events,
         "pileup": pileup,
@@ -147,28 +161,29 @@ def _apply_runtime_overrides(
         "processes": pandora_processes,
         "run_size": events,
         "chunk_size": events,
+        "hard_scatter_file": f"/output/runs/{hard_scatter_dir}/events.hepmc.gz",
     }
 
     new_manifest = []
     for stage in manifest:
-        orig_rel = stage["config_path"]
-        orig_path = prod_root / orig_rel
-        with open(orig_path) as f:
+        with open(prod_root / stage["config_path"]) as f:
             cfg = yaml.safe_load(f) or {}
 
         for key, value in overrides.items():
-            if key in cfg and value is not None:
-                cfg[key] = value
+            if key not in cfg or value is None:
+                continue
+            if key == "events" and cfg[key] == -1:
+                # -1 means "every event of the stage's input file"; the stages after
+                # digitisation rely on it (reco_tables refuses an event cap).
+                continue
+            cfg[key] = value
 
-        orig_basename = Path(orig_rel).name
-        overlay_rel = Path(".overlays") / run_id / f"{stage['stage']}__{orig_basename}"
-        overlay_path = prod_root / overlay_rel
-        overlay_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(overlay_path, "w") as f:
+        name = f"{stage['stage']}__{Path(stage['config_path']).name}"
+        with open(overlay_root / name, "w") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
 
         new_stage = dict(stage)
-        new_stage["config_path"] = str(overlay_rel)
+        new_stage["config_path"] = f"/output/{OVERLAY_SUBDIR}/{run_id}/{name}"
         new_manifest.append(new_stage)
 
     return new_manifest
@@ -237,7 +252,7 @@ def _simulate_remote(
     """
     try:
         from colliderml.remote import submit  # noqa: WPS433 (deferred import by design)
-    except ImportError as exc:  # pragma: no cover - exercised in commit B2
+    except ImportError as exc:  # pragma: no cover
         raise ImportError(
             "remote=True requires the remote extra: pip install 'colliderml[remote]'"
         ) from exc
@@ -279,9 +294,10 @@ def simulate(
     NLO channels) → detector simulation (Geant4 via DDSim) → tracker
     digitization, ACTS tracking and vertexing. With ``particle_flow=True``
     it continues with calorimeter digitization and Pandora particle flow,
-    and writes the final parquet tables (tracks, tracker_hits, calo_cells,
-    calo_clusters, pfos, vertices, particles, generator_particles) to
-    ``<output_dir>/parquet/``. Every stage runs inside a container.
+    and writes the final parquet tables (particles, generator_particles,
+    tracker_simhits, tracker_hits, tracks, truth_tracks, vertices,
+    calo_cells, calo_clusters, pfos) to ``<output_dir>/parquet/``. Every
+    stage runs inside a container.
 
     Args:
         preset: Named preset (e.g. ``"ttbar-pflow-quick"``). Sets
@@ -302,15 +318,16 @@ def simulate(
             ``particle_flow=True``.
         particle_flow: Run the stages after tracking. Defaults to the
             preset's setting, or ``False`` without a preset.
-        threads: Threads for Geant4 and ACTS. Defaults to the stage
-            configs' value (1).
+        threads: Threads for Geant4 and ACTS, 2 or more. Defaults to the
+            stage configs' value (2).
         pandora_processes: Concurrent Pandora processes. Defaults to the
             stage config's value (1). One process needs about 2 GB without
-            pileup and about 11 GB per event at pileup 200.
+            pileup and about 6 GB at pileup 200.
         remote: If ``True``, submit the job to the SaaS backend instead of
             running locally. Requires ``pip install 'colliderml[remote]'``.
             The backend does not run particle flow yet.
         run_id: Subdirectory under ``output_dir/runs/`` for this run.
+            Particle-flow runs must keep the default ``"0"``.
         prod_root: Host path to an existing :mod:`colliderml-production`
             checkout. Leave ``None`` to auto-clone on first use.
         runtime: Override container runtime (``"docker"``, ``"podman"`` or
@@ -323,8 +340,10 @@ def simulate(
 
     Raises:
         ValueError: If neither a preset nor explicit channel/events are
-            supplied, if the requested channel is unknown, or if
-            ``remote=True`` is combined with particle flow.
+            supplied, if the requested channel is unknown, if a count is
+            out of range, or if ``remote=True`` is combined with particle
+            flow.
+        FileExistsError: If the output directory already holds this run.
         ContainerRuntimeError: If ``remote=False`` and no container runtime
             is available locally.
         RuntimeError: If any pipeline stage exits non-zero.
@@ -332,6 +351,21 @@ def simulate(
     resolved_channel, resolved_events, resolved_pileup, use_particle_flow = _coerce_preset(
         preset, channel=channel, events=events, pileup=pileup, particle_flow=particle_flow
     )
+
+    if not _RUN_ID_PATTERN.fullmatch(run_id):
+        raise ValueError(
+            f"`run_id` must be a plain name (letters, digits, '_', '.', '-'), got {run_id!r}."
+        )
+    if use_particle_flow and run_id != "0":
+        raise ValueError(
+            "Particle-flow runs write one run per output directory: keep run_id='0' "
+            "and give each run its own output_dir."
+        )
+    if threads is not None and threads < 2:
+        # With one thread the ddsim of the pinned sim image writes every event twice.
+        raise ValueError(f"`threads` must be at least 2, got {threads}.")
+    if pandora_processes is not None and pandora_processes < 1:
+        raise ValueError(f"`pandora_processes` must be at least 1, got {pandora_processes}.")
 
     if remote:
         if use_particle_flow:
@@ -348,11 +382,13 @@ def simulate(
 
     # Local container path.
     pinned = load_pipeline_config()
-    sim_image = image or pinned.sim_image
-    pflow_image = reco_image or pinned.reco_image
+    resolved_sim_image = image or pinned.sim_image
+    resolved_reco_image = reco_image or pinned.reco_image
 
     rt = check_runtime_available(runtime)
-    needed_images = [sim_image, pflow_image] if use_particle_flow else [sim_image]
+    needed_images = [resolved_sim_image]
+    if use_particle_flow:
+        needed_images.append(resolved_reco_image)
     for needed in needed_images:
         if not pull_image(needed, runtime=rt):
             raise RuntimeError(f"Container image {needed} not available. Cannot proceed.")
@@ -362,6 +398,16 @@ def simulate(
         if output_dir is not None
         else _default_output_dir(resolved_channel, resolved_pileup, resolved_events)
     )
+    # Stages pick up files by name, so leftovers of an earlier run would be mixed in.
+    leftovers = [out_dir / "runs" / run_id, out_dir / OVERLAY_SUBDIR / run_id]
+    if use_particle_flow:
+        leftovers.append(out_dir / "parquet")
+    existing = [str(p) for p in leftovers if p.exists()]
+    if existing:
+        raise FileExistsError(
+            f"{out_dir} already holds a run ({', '.join(existing)}). "
+            "Choose a new output_dir" + ("." if use_particle_flow else " or another run_id.")
+        )
     out_dir.mkdir(parents=True, exist_ok=True)
 
     prod = (
@@ -379,12 +425,13 @@ def simulate(
             f"Is the colliderml-production clone at {prod} up to date?"
         )
 
-    # Apply the caller's kwargs by writing per-run overlay YAMLs under
-    # prod_root/.overlays/<run_id>/. Each stage script reads its config
-    # from disk, so without the overlays the static configs would win.
+    # Apply the caller's kwargs by writing per-run stage configs under
+    # <output_dir>/configs/<run_id>/. Each stage script reads its config
+    # from disk, so without them the static configs would win.
     manifest = _apply_runtime_overrides(
         manifest,
         prod_root=prod,
+        output_dir=out_dir,
         run_id=run_id,
         events=resolved_events,
         pileup=resolved_pileup,
@@ -415,8 +462,8 @@ def simulate(
         stage_manifest=manifest,
         seed=seed,
         run_id=run_id,
-        image=sim_image,
-        reco_image=pflow_image,
+        image=resolved_sim_image,
+        reco_image=resolved_reco_image,
         prod_root=prod,
         runtime=rt,
         on_stage_start=_on_start,

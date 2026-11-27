@@ -55,6 +55,7 @@ const config = defineConfig({
             { text: 'Quickstart', link: '/guide/quickstart' },
             { text: 'Platform tutorial', link: '/guide/tutorial' },
             { text: 'Local simulation', link: '/guide/simulation' },
+            { text: 'Particle flow tutorial', link: '/guide/particle-flow' },
             { text: 'Remote simulation', link: '/guide/remote-simulation' },
             { text: 'Benchmark tasks', link: '/guide/tasks' },
           ],

@@ -28,7 +28,7 @@ presets:
     events: 10
     pileup: 0
     particle_flow: true
-    description: "ttbar, 10 events, no pileup, with particle flow (~25 min)"
+    description: "ttbar, 10 events, no pileup, with particle flow (~12 min)"
 
   higgs-portal-quick:
     channel: higgs_portal
@@ -49,7 +49,7 @@ presets:
     pileup: 40
     description: "Higgs portal, 100 events, moderate pileup (~2 hrs)"
 
-  # --- Benchmark presets (submit to NERSC via remote=True) ----------------
+  # --- Benchmark presets (submit with remote=True) ------------------------
   ttbar-benchmark:
     channel: ttbar
     events: 1000
@@ -62,8 +62,5 @@ presets:
     pileup: 200
     description: "Higgs portal, 1000 events, full pileup (benchmark-scale)"
 
-# NOTE: the `single-muon` preset has been removed in v0.4.0. The
-# production single-muon dataset uses an ACTS particle-gun generator
-# (scripts/simulation/particlegun_gen.py), but pipeline.py currently
-# routes single_muon through pythia_generation. Will be reintroduced
-# in v0.4.1 once the channel-stage routing is fixed.
+# There is no single-muon preset: that channel needs a particle-gun stage,
+# which the local pipeline does not have.

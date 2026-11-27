@@ -30,12 +30,13 @@ from colliderml.simulate.config import ENV_OVERRIDES, load_pipeline_config
 
 _PINNED = load_pipeline_config(environ={})
 
-#: Default sim image (generation, Geant4, ACTS tracking, packaging); override
-#: with ``image=...`` on :func:`simulate` or the ``--image`` CLI flag.
+#: Pinned sim image (generation, Geant4, ACTS tracking, packaging), as shipped
+#: in the package. The functions below resolve their default at call time, so
+#: ``COLLIDERML_SIM_IMAGE`` applies; override per call with ``image=...``.
 DEFAULT_IMAGE = _PINNED.sim_image
 
-#: Default reco image (calorimeter digitisation and Pandora); override with
-#: ``reco_image=...`` or ``--reco-image``.
+#: Pinned reco image (calorimeter digitisation and Pandora), as shipped;
+#: ``COLLIDERML_RECO_IMAGE`` or ``reco_image=...`` override it.
 DEFAULT_RECO_IMAGE = _PINNED.reco_image
 
 #: Git repository that houses the simulation pipeline scripts and configs.
@@ -50,7 +51,9 @@ COLLIDERML_PRODUCTION_REF = _PINNED.production_ref
 COLLIDERML_PRODUCTION_REF_ENV = ENV_OVERRIDES["production_ref"]
 
 #: Runtimes probed by :func:`get_container_runtime`, in order of preference.
-SUPPORTED_RUNTIMES = ("docker", "podman", "podman-hpc")
+#: ``podman-hpc`` comes before ``podman``: where the wrapper is installed,
+#: plain ``podman`` is on ``$PATH`` too but does not see the migrated images.
+SUPPORTED_RUNTIMES = ("docker", "podman-hpc", "podman")
 
 #: Script in the production repo that sets up a stage's environment in the
 #: container; takes the stage's image kind (``sim`` or ``reco``).
@@ -96,8 +99,8 @@ def get_container_runtime() -> str:
     """Return the container runtime binary to use.
 
     Takes the first of :data:`SUPPORTED_RUNTIMES` on ``$PATH``: Docker,
-    then Podman, then ``podman-hpc`` (the Podman wrapper on HPC systems
-    such as NERSC Perlmutter).
+    then ``podman-hpc`` (the Podman wrapper on HPC systems such as NERSC
+    Perlmutter), then Podman.
 
     Returns:
         ``"docker"``, ``"podman"`` or ``"podman-hpc"``.
@@ -109,10 +112,10 @@ def get_container_runtime() -> str:
         if shutil.which(runtime):
             return runtime
     raise ContainerRuntimeError(
-        "No container runtime on PATH (looked for docker, podman, podman-hpc).\n"
+        "No container runtime on PATH (looked for docker, podman-hpc, podman).\n"
         "  - Docker: https://docs.docker.com/get-docker/\n"
         "  - Podman: https://podman.io/getting-started/installation\n"
-        "Or use remote simulation: colliderml.simulate(..., remote=True)"
+        "Runs without particle flow can also go to the backend: simulate(..., remote=True)"
     )
 
 
@@ -147,8 +150,11 @@ def check_runtime_available(runtime: Optional[str] = None) -> str:
     return rt
 
 
-def check_image_available(image: str = DEFAULT_IMAGE, *, runtime: Optional[str] = None) -> bool:
-    """Return ``True`` iff the container image is already present locally."""
+def check_image_available(image: Optional[str] = None, *, runtime: Optional[str] = None) -> bool:
+    """Return ``True`` iff the container image is already present locally.
+
+    ``image`` defaults to the pinned sim image."""
+    image = image or load_pipeline_config().sim_image
     rt = runtime or get_container_runtime()
     # `image exists` is the Podman query; it also sees podman-hpc's migrated
     # images, which `image inspect` misses on compute nodes.
@@ -162,19 +168,20 @@ def check_image_available(image: str = DEFAULT_IMAGE, *, runtime: Optional[str] 
 
 
 def pull_image(
-    image: str = DEFAULT_IMAGE,
+    image: Optional[str] = None,
     *,
     interactive: bool = True,
     runtime: Optional[str] = None,
 ) -> bool:
     """Ensure the container image is available locally, pulling if needed.
 
-    The images are large (about 6 GB for the sim image, 27 GB for the reco
-    image), so we ask before starting a fresh pull. Pass
+    The images are large (about 6 GB for the sim image and 27 GB for the
+    reco image once unpacked), so we ask before starting a fresh pull. Pass
     ``interactive=False`` for CI or scripted callers.
 
     Args:
-        image: Image reference (``<registry>/<repo>:<tag>``).
+        image: Image reference (``<registry>/<repo>:<tag>``). Defaults to
+            the pinned sim image.
         interactive: If ``True`` and ``stdin`` is a tty, prompt before
             downloading.
         runtime: Runtime to use; auto-detected if ``None``.
@@ -183,19 +190,20 @@ def pull_image(
         ``True`` if the image is now available, ``False`` if the user
         declined the interactive prompt.
     """
+    image = image or load_pipeline_config().sim_image
     rt = runtime or get_container_runtime()
     if check_image_available(image, runtime=rt):
         return True
     if interactive and sys.stdin.isatty():
         print(f"\nContainer image {image} is not present locally.")
-        print("This is a large download (about 6 GB for the sim image, 27 GB for the reco image).")
+        print("This is a large download (unpacked: about 6 GB for the sim image, 27 GB for the reco image).")
         try:
             response = input("Continue? [Y/n]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print("\nAborted.")
             return False
         if response in ("n", "no"):
-            print("Aborted. Use remote=True to run on the backend instead.")
+            print("Aborted.")
             return False
     print(f"Pulling {image} via {rt}...")
     result = subprocess.run([rt, "pull", image], timeout=3600)
@@ -242,25 +250,26 @@ def clone_colliderml_production(
         shutil.rmtree(clone_dir)
 
     if clone_dir.exists() and (clone_dir / ".git").exists():
-        # Fetch + checkout to the desired ref.
-        subprocess.run(
+        # Fetch the ref and check it out. Without network the fetch fails; a ref
+        # that is already in the clone (a tag from an earlier run) still works.
+        fetched = subprocess.run(
             ["git", "-C", str(clone_dir), "fetch", "--quiet", "origin", target_ref],
-            check=False,
+            capture_output=True,
             timeout=300,
         )
-        checkout = subprocess.run(
-            ["git", "-C", str(clone_dir), "checkout", "--quiet", "FETCH_HEAD"],
-            check=False,
-            timeout=60,
-        )
-        if checkout.returncode != 0:
-            # Fallback: try as a branch/tag name.
-            subprocess.run(
-                ["git", "-C", str(clone_dir), "checkout", "--quiet", target_ref],
-                check=False,
+        for candidate in (["FETCH_HEAD"] if fetched.returncode == 0 else []) + [target_ref]:
+            checkout = subprocess.run(
+                ["git", "-C", str(clone_dir), "checkout", "--quiet", "--detach", candidate],
+                capture_output=True,
+                text=True,
                 timeout=60,
             )
-        return clone_dir
+            if checkout.returncode == 0:
+                return clone_dir
+        raise ContainerRuntimeError(
+            f"Could not check out '{target_ref}' in {clone_dir}: {checkout.stderr.strip()}\n"
+            "Check the network connection, or delete that directory to clone it again."
+        )
 
     # Fresh clone.
     root.mkdir(parents=True, exist_ok=True)
@@ -309,15 +318,16 @@ def clone_colliderml_production(
     return clone_dir
 
 
-def _cache_dir(prod_root: Path) -> Path:
+def container_cache_dir() -> Path:
     """Return (creating it if needed) the cache directory mounted as ``/cache``.
 
-    It lives at ``<prod_root>/.cache`` and holds what the in-container setup
-    downloads on first use: the Geant4 datasets (about 2 GB) and a few Python
-    packages. Everything else the stages need is in the images.
+    It is ``<default_cache_root()>/container_cache``, next to the production
+    checkout and not inside it, so re-cloning the checkout keeps it. It holds
+    what the in-container setup downloads on first use: the Geant4 datasets
+    (about 2 GB). Everything else the stages need is in the images.
     """
-    cache_dir = prod_root / ".cache"
-    cache_dir.mkdir(exist_ok=True)
+    cache_dir = default_cache_root() / "container_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 
 
@@ -332,7 +342,7 @@ def run_stage(
     image_kind: str = "sim",
     seed: int = 42,
     run_id: str = "0",
-    image: str = DEFAULT_IMAGE,
+    image: Optional[str] = None,
     runtime: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> subprocess.CompletedProcess[bytes]:
@@ -346,15 +356,17 @@ def run_stage(
             ``/cache``).
         script: Stage script, relative to ``scripts/`` in the production
             repo (e.g. ``"simulation/pythia_gen.py"``).
-        config_path: Path to the stage's YAML config, relative to
-            ``prod_root``.
+        config_path: The stage's YAML config: a path relative to
+            ``prod_root``, or an absolute path inside the container
+            (``/output/...``).
         stage: Stage identifier written to ``pipeline_timing.csv``.
             Defaults to the script's file name.
         image_kind: ``"sim"`` or ``"reco"``: which environment the
             production repo's setup script prepares. Must match ``image``.
         seed: Random seed forwarded to the stage script.
         run_id: Run subdirectory under ``output_dir/runs/``.
-        image: Container image reference.
+        image: Container image reference. Defaults to the pinned image
+            of ``image_kind``.
         runtime: Runtime to use; auto-detected if ``None``.
         timeout: Seconds after which the stage is abandoned. ``None``
             (the default) waits indefinitely: a pile-up 200 Geant4 stage
@@ -368,6 +380,9 @@ def run_stage(
             two-image pipeline (no stage environment script).
     """
     rt = runtime or get_container_runtime()
+    if image is None:
+        pinned = load_pipeline_config()
+        image = pinned.reco_image if image_kind == "reco" else pinned.sim_image
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not (prod_root / STAGE_ENV_SCRIPT).is_file():
@@ -377,20 +392,18 @@ def run_stage(
             "of colliderml needs. Delete the checkout to let simulate() re-clone it."
         )
 
-    script_dir = os.path.dirname(script)
-    script_name = os.path.basename(script)
-    stage_label = stage or Path(script_name).stem
+    stage_label = stage or Path(script).stem
+    # Overlay configs live in the output directory and come as container paths.
+    container_config = config_path if config_path.startswith("/") else f"/workspace/{config_path}"
 
+    # The stage's settings are positional parameters of a fixed command, so no
+    # value is re-read as shell source.
     container_cmd = (
-        f"source /workspace/{STAGE_ENV_SCRIPT} {image_kind} && "
-        f"cd /workspace/scripts/{script_dir} && "
-        f"python3 /workspace/{STAGE_TIMER_SCRIPT} "
-        f"--record /output/pipeline_timing.csv --stage {stage_label} -- "
-        f"python3 {script_name} "
-        f"--config /workspace/{config_path} "
-        f"--output /output/runs "
-        f"--output-subdir {run_id} "
-        f"--seed {seed}"
+        'source "/workspace/$1" "$2" || exit 1; '
+        'cd "/workspace/scripts/$(dirname "$4")" || exit 1; '
+        'exec python3 "/workspace/$3" --record /output/pipeline_timing.csv --stage "$5" -- '
+        'python3 "$(basename "$4")" --config "$6" --output /output/runs '
+        '--output-subdir "$7" --seed "$8"'
     )
 
     cmd: List[str] = [
@@ -405,28 +418,28 @@ def run_stage(
         f"{cache_dir}:/cache",
         "-e",
         "COLLIDERML_CACHE=/cache",
+    ]
+    # Proxy settings of the host, for the first-run download of the Geant4 data.
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy"):
+        if os.environ.get(name):
+            cmd += ["-e", f"{name}={os.environ[name]}"]
+    cmd += [
         "--entrypoint",
         "/bin/bash",
         image,
         "-c",
         container_cmd,
+        "stage",
+        STAGE_ENV_SCRIPT,
+        image_kind,
+        STAGE_TIMER_SCRIPT,
+        script,
+        stage_label,
+        container_config,
+        run_id,
+        str(seed),
     ]
     return subprocess.run(cmd, timeout=timeout)
-
-
-def _copy_madgraph_output(output_dir: Path, run_id: str) -> None:
-    """Bridge MadGraph output to where the Pythia stage expects it.
-
-    MadGraph writes ``runs/all/<run_id>/events.hepmc.gz`` but the downstream
-    Pythia stage reads ``runs/<run_id>/events.hepmc.gz``. This keeps that
-    stitch out of the stage scripts themselves.
-    """
-    src = output_dir / "runs" / "all" / run_id / "events.hepmc.gz"
-    dst_dir = output_dir / "runs" / run_id
-    dst = dst_dir / "events.hepmc.gz"
-    if src.exists() and not dst.exists():
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(str(src), str(dst))
 
 
 def run_pipeline(
@@ -436,8 +449,8 @@ def run_pipeline(
     stage_manifest: List[dict],
     seed: int = 42,
     run_id: str = "0",
-    image: str = DEFAULT_IMAGE,
-    reco_image: str = DEFAULT_RECO_IMAGE,
+    image: Optional[str] = None,
+    reco_image: Optional[str] = None,
     prod_root: Optional[Path] = None,
     runtime: Optional[str] = None,
     on_stage_start: Optional[Callable[[int, int, str], None]] = None,
@@ -446,16 +459,15 @@ def run_pipeline(
     """Run every stage in a manifest, stopping on the first non-zero exit.
 
     Args:
-        channel: Physics channel (used for post-stage hooks like the
-            MadGraph → Pythia bridge).
+        channel: Physics channel (not used; kept for callers that pass it).
         output_dir: Host directory for outputs (mounted as ``/output``).
         stage_manifest: List of dicts produced by
             :func:`colliderml.simulate.pipeline.generate_stage_manifest`.
         seed: Random seed forwarded to each stage.
         run_id: Run subdirectory under ``output_dir/runs/``.
-        image: Sim image reference.
+        image: Sim image reference. Defaults to the pinned image.
         reco_image: Reco image reference, used by the stages whose manifest
-            entry has ``image == "reco"``.
+            entry has ``image == "reco"``. Defaults to the pinned image.
         prod_root: Host path to the production-repo clone. If ``None``,
             :func:`clone_colliderml_production` is called.
         runtime: Runtime to use; auto-detected if ``None``.
@@ -473,7 +485,7 @@ def run_pipeline(
     rt = runtime or check_runtime_available()
     if prod_root is None:
         prod_root = clone_colliderml_production()
-    cache_dir = _cache_dir(prod_root)
+    cache_dir = container_cache_dir()
 
     output_dir.mkdir(parents=True, exist_ok=True)
     total = len(stage_manifest)
@@ -510,8 +522,5 @@ def run_pipeline(
                 f"Stage '{stage['name']}' failed with exit code {completed.returncode}. "
                 f"Check the container output above for details."
             )
-
-        if stage["stage"] == "madgraph_generation":
-            _copy_madgraph_output(output_dir, run_id)
 
     return results

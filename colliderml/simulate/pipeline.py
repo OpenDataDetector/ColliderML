@@ -219,10 +219,9 @@ def generate_stage_manifest(
 ) -> List[Dict[str, str]]:
     """Assemble the list of (script, config) pairs to execute for a channel.
 
-    A generation or tracking stage whose config YAML is absent from the
-    production checkout is skipped. With ``particle_flow=True`` every
-    particle-flow stage must have its config: a checkout without them
-    cannot run the full chain, and stopping early would look like success.
+    Every stage of the channel must have its config YAML in the production
+    checkout: a chain that silently skipped a stage would look like a
+    successful, shorter run.
 
     Args:
         channel: Physics channel name.
@@ -237,8 +236,7 @@ def generate_stage_manifest(
         mounts ``prod_root`` as ``/workspace``).
 
     Raises:
-        FileNotFoundError: If ``particle_flow`` is set and the checkout
-            lacks the config of a particle-flow stage.
+        FileNotFoundError: If the checkout lacks the config of a stage.
     """
     stages = get_channel_stages(channel, particle_flow=particle_flow)
     config_dir = find_config_dir(channel, prod_root)
@@ -247,14 +245,11 @@ def generate_stage_manifest(
     for stage in stages:
         config_file = config_dir / stage.config
         if not config_file.exists():
-            if stage.particle_flow_only:
-                raise FileNotFoundError(
-                    f"{config_file} not found: the colliderml-production checkout at "
-                    f"{prod_root} has no particle-flow configs for channel '{channel}'. "
-                    "It is probably older than the pinned pipeline release; delete it "
-                    "to let simulate() re-clone."
-                )
-            continue
+            raise FileNotFoundError(
+                f"{config_file} not found: the colliderml-production checkout at "
+                f"{prod_root} has no config for stage '{stage.stage}' of channel "
+                f"'{channel}'. It probably does not match the pinned pipeline release."
+            )
         manifest.append(
             {
                 "name": stage.name,

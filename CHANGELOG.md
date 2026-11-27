@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+- [library] `colliderml.simulate(particle_flow=True)` runs the chain past tracking: truth particle tables, calorimeter digitisation and Pandora particle flow (in a second, reco container), and the final parquet tables (`particles`, `generator_particles`, `tracker_simhits`, `tracker_hits`, `tracks`, `truth_tracks`, `vertices`, `calo_cells`, `calo_clusters`, `pfos`) under `<output_dir>/parquet/`. New preset `ttbar-pflow-quick`, new arguments `reco_image`, `threads`, `pandora_processes`, and the CLI flags `--particle-flow`, `--reco-image`, `--threads`, `--pandora-processes`.
+- [library] `SimulationResult.parquet_dir` and `SimulationResult.tables()`.
+- [library] `colliderml/simulate/pipeline_config.yaml` pins the production-repo ref and both container images in one place (`load_pipeline_config()`), with the overrides `COLLIDERML_PRODUCTION_REF`, `COLLIDERML_SIM_IMAGE`, `COLLIDERML_RECO_IMAGE`.
+- [library] `podman-hpc` is accepted as a container runtime; `colliderml simulate --runtime`.
+- [docs] Tutorial "Simulate and reconstruct ttbar with particle flow".
+
+### Changed
+- [library] The pinned pipeline is `pipeline-v0.3.0` with the `sw:pr-8` sim image. This changes what a local simulation without particle flow writes, compared with 0.4.2:
+  - The run directory's `tracker_hits` table now holds the digitised clusters. The Geant4 hits it held before are in the new `tracker_simhits` table. Code that read `tracker_hits` from a 0.4.2 run reads different content under the same name.
+  - A `truth_tracks` table is added. The `calo_hits` table is no longer written (calorimeter cells come from the particle-flow stages).
+  - The detector description is ODD v6.0.2 (0.4.2: v5.0.0).
+  - Tracking seeds at the 3 T detector field with a seed minimum pT of 0.65 GeV, and AMVF vertexing runs.
+- [library] Geant4 and ACTS run with 2 threads by default, and `threads=1` is refused: with one thread the Geant4 step of the pinned sim image writes every event twice.
+- [library] `simulate()` refuses an output directory that already holds the run (`FileExistsError`), validates `run_id`, and fails if the production checkout lacks the config of a stage instead of skipping it.
+- [library] The per-run stage configs are written to `<output_dir>/configs/<run_id>/` (0.4.2: `.overlays/` in the cached production checkout, shared between runs).
+- [library] Every stage's wall time and peak memory are written to `<output_dir>/pipeline_timing.csv`.
+- [library] Stages no longer have a two-hour timeout.
+
+### Fixed
+- [library] `colliderml simulate` without `--image` passed `None` as the image name; it now uses the pinned image.
+- [library] `colliderml.simulate(...)` raised `TypeError: 'module' object is not callable` once anything had imported the `colliderml.simulate` subpackage; it is now callable in any import order.
+- [library] A cached production checkout that could not be switched to the requested ref was used as it was; this is now an error.
+- [library] The MadGraph output was copied between run directories on the host, which fails with Docker (the directory belongs to root). Pythia now reads it where MadGraph left it.
+- [docs] `colliderml.load()` does not read a simulation output directory; the local-simulation guide said it did.
+
 ## [0.4.2] - 2026-06-28
 
 ### Fixed

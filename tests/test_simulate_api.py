@@ -83,10 +83,15 @@ def test_manifest_carries_image_and_stops_after_tracking_by_default(tmp_path: Pa
     assert all(m["image"] == "sim" for m in tracking)
 
 
-def test_manifest_refuses_particle_flow_on_an_old_checkout(tmp_path: Path) -> None:
+def test_manifest_refuses_a_checkout_without_a_stage_config(tmp_path: Path) -> None:
     _write_stage_configs(tmp_path, "higgs_portal", ["pythia_generation", "simulation", "digitization"])
-    with pytest.raises(FileNotFoundError, match="no particle-flow configs"):
+    assert len(generate_stage_manifest("higgs_portal", prod_root=tmp_path)) == 3
+    with pytest.raises(FileNotFoundError, match="stage 'particles_full'"):
         generate_stage_manifest("higgs_portal", prod_root=tmp_path, particle_flow=True)
+
+    (tmp_path / "configs_development/docker_test/higgs_portal/digitization_config.yaml").unlink()
+    with pytest.raises(FileNotFoundError, match="stage 'digitization'"):
+        generate_stage_manifest("higgs_portal", prod_root=tmp_path)
 
 
 def _install_simulate_stubs(
@@ -100,7 +105,7 @@ def _install_simulate_stubs(
     captured: Dict[str, Any] = {"pull_image": [], "run_pipeline": []}
 
     def fake_check_runtime_available(runtime: Any = None) -> str:
-        return "docker"
+        return runtime or "docker"
 
     def fake_pull_image(image: str, *, runtime: Any = None, interactive: bool = True) -> bool:
         captured["pull_image"].append(image)
@@ -117,32 +122,28 @@ def _install_simulate_stubs(
         captured["manifest_channel"] = channel
         captured["manifest_prod_root"] = prod_root
         captured["manifest_particle_flow"] = particle_flow
-        # Materialise stub YAML files alongside the manifest entries so the
-        # runtime-overrides overlay step (which reads each stage's YAML to
-        # apply events/pileup/seed kwargs) has something to load.
+        # Write a stub YAML per stage, with the keys the real configs have, so the
+        # per-run config step (events/pileup/seed kwargs) has something to load.
         import yaml as _yaml
         cfg_dir = prod_root / f"configs_development/docker_test/{channel}"
         cfg_dir.mkdir(parents=True, exist_ok=True)
-        (cfg_dir / "pythia_config.yaml").write_text(
-            _yaml.safe_dump({"events": 10, "pileup": 10, "seed": 42})
-        )
-        (cfg_dir / "simulation_config.yaml").write_text(
-            _yaml.safe_dump({"events": 10, "pileup": 10, "seed": 42})
-        )
-        return [
-            {
-                "name": "Pythia Generation",
-                "stage": "pythia_generation",
-                "script": "simulation/pythia_gen.py",
-                "config_path": f"configs_development/docker_test/{channel}/pythia_config.yaml",
-            },
-            {
-                "name": "Detector Simulation",
-                "stage": "simulation",
-                "script": "simulation/ddsim_run.py",
-                "config_path": f"configs_development/docker_test/{channel}/simulation_config.yaml",
-            },
-        ]
+        all_events = {"particles_full", "pandora_reco", "reco_tables"}  # read their whole input
+        manifest = []
+        for stage in get_channel_stages(channel, particle_flow=particle_flow):
+            cfg = {"events": -1 if stage.stage in all_events else 10, "pileup": 10, "seed": 42}
+            if stage.stage == "package_parquet":
+                cfg = {"run_size": 10, "chunk_size": 10}
+            (cfg_dir / stage.config).write_text(_yaml.safe_dump(cfg))
+            manifest.append(
+                {
+                    "name": stage.name,
+                    "stage": stage.stage,
+                    "script": stage.script,
+                    "image": stage.image,
+                    "config_path": f"configs_development/docker_test/{channel}/{stage.config}",
+                }
+            )
+        return manifest
 
     def fake_run_pipeline(**kwargs: Any) -> List[StageRun]:
         captured["run_pipeline"].append(kwargs)
@@ -180,7 +181,7 @@ def test_simulate_local_happy_path(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert result.output_dir == (tmp_path / "out").resolve()
     assert result.run_dir == (tmp_path / "out").resolve() / "runs" / "0"
     assert result.remote_request_id is None
-    assert [s.returncode for s in result.stages] == [0, 0]
+    assert [s.stage for s in result.stages] == ["pythia_generation", "simulation", "digitization"]
     assert captured["manifest_channel"] == "higgs_portal"
     assert captured["pull_image"], "pull_image should have been called"
     assert captured["run_pipeline"], "run_pipeline should have been called"
@@ -234,6 +235,30 @@ def test_simulate_particle_flow_preset_runs_full_chain_with_both_images(
     assert result.parquet_dir == (tmp_path / "out").resolve() / "parquet"
 
 
+def test_particle_flow_run_keeps_all_events_in_the_stages_after_tracking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    captured = _install_simulate_stubs(monkeypatch, tmp_path)
+    simulate(
+        preset="ttbar-pflow-quick", events=3, pandora_processes=2, runtime="podman-hpc",
+        output_dir=tmp_path / "out", quiet=True,
+    )
+    call = captured["run_pipeline"][0]
+    assert call["runtime"] == "podman-hpc"
+    assert len(call["stage_manifest"]) == 9
+    events = {
+        m["stage"]: yaml.safe_load((tmp_path / "out" / m["config_path"][len("/output/"):]).read_text()).get("events")
+        for m in call["stage_manifest"]
+    }
+    # an event cap in reco_tables is refused when Pandora ran in slices
+    assert events["particles_full"] == events["pandora_reco"] == events["reco_tables"] == -1
+    assert events["madgraph_generation"] == events["simulation"] == events["digitization"] == 3
+    packaging = yaml.safe_load((tmp_path / "out/configs/0/package_parquet__package_parquet_config.yaml").read_text())
+    assert packaging == {"run_size": 3, "chunk_size": 3}
+
+
 def test_simulate_without_particle_flow_pulls_only_the_sim_image(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -269,7 +294,15 @@ def test_simulate_remote_rejects_particle_flow() -> None:
         simulate(preset="ttbar-pflow-quick", remote=True)
 
 
-@pytest.mark.parametrize("kwargs", [{"events": 0}, {"events": 5, "pileup": -1}])
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"events": 0},
+        {"events": 5, "pileup": -1},
+        {"events": 5, "threads": 1},
+        {"events": 5, "pandora_processes": 0},
+    ],
+)
 def test_simulate_rejects_out_of_range_counts(kwargs: Dict[str, int]) -> None:
     with pytest.raises(ValueError):
         simulate(channel="ttbar", **kwargs)
@@ -277,7 +310,8 @@ def test_simulate_rejects_out_of_range_counts(kwargs: Dict[str, int]) -> None:
 
 def test_simulation_result_tables_groups_files_by_table(tmp_path: Path) -> None:
     result = SimulationResult(
-        channel="ttbar", events=2, pileup=0, output_dir=tmp_path, run_dir=tmp_path / "runs" / "0"
+        channel="ttbar", events=2, pileup=0, output_dir=tmp_path, run_dir=tmp_path / "runs" / "0",
+        particle_flow=True,
     )
     assert result.tables() == {}
     for group, table in (("reco", "pfos"), ("reco", "tracks"), ("truth", "particles")):
@@ -287,6 +321,73 @@ def test_simulation_result_tables_groups_files_by_table(tmp_path: Path) -> None:
     tables = result.tables()
     assert sorted(tables) == ["particles", "pfos", "tracks"]
     assert tables["pfos"][0].name == "x.reco.pfos.events0-1.parquet"
+
+    tracking_only = SimulationResult(
+        channel="ttbar", events=2, pileup=0, output_dir=tmp_path, run_dir=tmp_path / "runs" / "0"
+    )
+    assert tracking_only.tables() == {}
+
+
+def test_simulate_refuses_an_output_directory_with_a_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _install_simulate_stubs(monkeypatch, tmp_path)
+    simulate(preset="ttbar-pflow-quick", output_dir=tmp_path / "out", quiet=True)
+    with pytest.raises(FileExistsError, match="already holds a run"):
+        simulate(preset="ttbar-pflow-quick", seed=7, output_dir=tmp_path / "out", quiet=True)
+    assert len(captured["run_pipeline"]) == 1
+
+
+def test_tracking_runs_can_share_an_output_directory_with_different_run_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _install_simulate_stubs(monkeypatch, tmp_path)
+    simulate(preset="ttbar-quick", output_dir=tmp_path / "out", run_id="a", quiet=True)
+    simulate(preset="ttbar-quick", output_dir=tmp_path / "out", run_id="b", quiet=True)
+    with pytest.raises(FileExistsError):
+        simulate(preset="ttbar-quick", output_dir=tmp_path / "out", run_id="a", quiet=True)
+    assert [c["run_id"] for c in captured["run_pipeline"]] == ["a", "b"]
+
+
+@pytest.mark.parametrize("run_id", ["../x", "/abs", "a b", "", "a/b", ".hidden"])
+def test_simulate_rejects_run_ids_that_are_not_plain_names(run_id: str) -> None:
+    with pytest.raises(ValueError, match="run_id"):
+        simulate(channel="ttbar", events=2, run_id=run_id)
+
+
+def test_particle_flow_requires_the_default_run_id() -> None:
+    with pytest.raises(ValueError, match="run_id='0'"):
+        simulate(preset="ttbar-pflow-quick", run_id="3")
+
+
+def test_colliderml_simulate_is_callable_in_any_import_order() -> None:
+    import importlib
+
+    import colliderml
+
+    with pytest.raises(ValueError, match="requires either a preset"):
+        colliderml.simulate()
+    importlib.import_module("colliderml.simulate")  # binds the subpackage on the parent
+    with pytest.raises(ValueError, match="requires either a preset"):
+        colliderml.simulate()
+    with pytest.raises(ValueError, match="requires either a preset"):
+        colliderml.simulate()
+
+
+def test_two_output_directories_do_not_share_stage_configs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    captured = _install_simulate_stubs(monkeypatch, tmp_path)
+    simulate(channel="higgs_portal", events=3, pileup=0, output_dir=tmp_path / "a", quiet=True)
+    simulate(channel="higgs_portal", events=7, pileup=0, output_dir=tmp_path / "b", quiet=True)
+    for name, events in (("a", 3), ("b", 7)):
+        configs = sorted((tmp_path / name / "configs" / "0").glob("*.yaml"))
+        assert len(configs) == 3
+        assert all(yaml.safe_load(c.read_text())["events"] == events for c in configs)
+    first = captured["run_pipeline"][0]["stage_manifest"][0]["config_path"]
+    assert first == "/output/configs/0/pythia_generation__pythia_config.yaml"
 
 
 def test_simulate_empty_manifest_raises(
@@ -324,6 +425,12 @@ def test_simulation_result_list_files_includes_stage_output(
 # ---------------------------------------------------------------------------
 # Runtime override overlays (events / pileup / seed kwargs actually take effect)
 # ---------------------------------------------------------------------------
+def _host_path(output_dir: Path, container_path: str) -> Path:
+    """Host file behind a container path under /output."""
+    assert container_path.startswith("/output/")
+    return output_dir / container_path[len("/output/"):]
+
+
 class TestRuntimeOverrides:
     """``simulate(events=N, pileup=M)`` must propagate into the per-stage
     YAML configs that the container reads. Without the overlay step the
@@ -350,12 +457,12 @@ class TestRuntimeOverrides:
         }]
 
         new_manifest = _apply_runtime_overrides(
-            manifest, prod_root=tmp_path, run_id="0",
+            manifest, prod_root=tmp_path, output_dir=tmp_path / "out", run_id="0",
             events=2, pileup=5, seed=99,
         )
-        # config_path was rewritten to the overlay
-        assert new_manifest[0]["config_path"].startswith(".overlays/0/")
-        overlay = tmp_path / new_manifest[0]["config_path"]
+        # config_path was rewritten to the container path of the per-run config
+        assert new_manifest[0]["config_path"].startswith("/output/configs/0/")
+        overlay = _host_path(tmp_path / "out", new_manifest[0]["config_path"])
         assert overlay.exists()
 
         # Loaded values reflect the kwargs
@@ -379,10 +486,10 @@ class TestRuntimeOverrides:
         manifest = [{"name": "P", "stage": "pythia_generation",
                      "script": "s", "config_path": "configs_development/docker_test/higgs_portal/pythia_config.yaml"}]
         new_manifest = _apply_runtime_overrides(
-            manifest, prod_root=tmp_path, run_id="0",
+            manifest, prod_root=tmp_path, output_dir=tmp_path / "out", run_id="0",
             events=2, pileup=5, seed=42,
         )
-        loaded = _yaml.safe_load((tmp_path / new_manifest[0]["config_path"]).read_text())
+        loaded = _yaml.safe_load(_host_path(tmp_path / "out", new_manifest[0]["config_path"]).read_text())
         assert loaded["events"] == 2
         # Hand-crafted Pythia knobs survive
         assert loaded["pythia_settings"] == ["Higgs:useBSM = on", "35:m0 = 125.0"]
@@ -405,10 +512,10 @@ class TestRuntimeOverrides:
         manifest = [{"name": "MG init", "stage": "madgraph_init",
                      "script": "s", "config_path": "configs_development/docker_test/ttbar/madgraph_init_config.yaml"}]
         new_manifest = _apply_runtime_overrides(
-            manifest, prod_root=tmp_path, run_id="0",
+            manifest, prod_root=tmp_path, output_dir=tmp_path / "out", run_id="0",
             events=2, pileup=5, seed=42,
         )
-        loaded = _yaml.safe_load((tmp_path / new_manifest[0]["config_path"]).read_text())
+        loaded = _yaml.safe_load(_host_path(tmp_path / "out", new_manifest[0]["config_path"]).read_text())
         assert "events" not in loaded
         assert "pileup" not in loaded
         # Stage-specific keys preserved
@@ -424,13 +531,14 @@ class TestRuntimeOverrides:
         manifest = [{"name": "P", "stage": "pythia_generation",
                      "script": "s", "config_path": "configs_development/docker_test/higgs_portal/pythia_config.yaml"}]
 
-        _apply_runtime_overrides(manifest, prod_root=tmp_path, run_id="alpha",
+        out = tmp_path / "out"
+        _apply_runtime_overrides(manifest, prod_root=tmp_path, output_dir=out, run_id="alpha",
                                  events=2, pileup=5, seed=42)
-        _apply_runtime_overrides(manifest, prod_root=tmp_path, run_id="beta",
+        _apply_runtime_overrides(manifest, prod_root=tmp_path, output_dir=out, run_id="beta",
                                  events=99, pileup=200, seed=42)
 
-        alpha = _yaml.safe_load((tmp_path / ".overlays/alpha/pythia_generation__pythia_config.yaml").read_text())
-        beta = _yaml.safe_load((tmp_path / ".overlays/beta/pythia_generation__pythia_config.yaml").read_text())
+        alpha = _yaml.safe_load((out / "configs/alpha/pythia_generation__pythia_config.yaml").read_text())
+        beta = _yaml.safe_load((out / "configs/beta/pythia_generation__pythia_config.yaml").read_text())
         assert alpha["events"] == 2 and alpha["pileup"] == 5
         assert beta["events"] == 99 and beta["pileup"] == 200
 
@@ -452,12 +560,13 @@ class TestRuntimeOverrides:
             manifest.append({"stage": stage, "config_path": f"configs/{stage}.yaml"})
 
         new = _apply_runtime_overrides(
-            manifest, prod_root=tmp_path, run_id="0", events=3, pileup=0, seed=1,
+            manifest, prod_root=tmp_path, output_dir=tmp_path / "out", run_id="0", events=3, pileup=0, seed=1,
             threads=4, pandora_processes=2,
         )
-        out = {m["stage"]: yaml.safe_load((tmp_path / m["config_path"]).read_text()) for m in new}
+        out = {m["stage"]: yaml.safe_load(_host_path(tmp_path / "out", m["config_path"]).read_text())
+               for m in new}
         assert out["simulation"] == {"events": 3, "threads": 4}
-        assert out["pandora_reco"] == {"events": 3, "processes": 2}
+        assert out["pandora_reco"] == {"events": -1, "processes": 2}
         assert out["package_parquet"] == {"run_size": 3, "chunk_size": 3, "row_group_size": 100000}
 
     def test_overlay_leaves_threads_alone_when_not_requested(self, tmp_path: Path) -> None:
@@ -468,8 +577,30 @@ class TestRuntimeOverrides:
         (tmp_path / "sim.yaml").write_text(yaml.safe_dump({"events": 10, "threads": 8, "processes": 5}))
         new = _apply_runtime_overrides(
             [{"stage": "simulation", "config_path": "sim.yaml"}],
-            prod_root=tmp_path, run_id="0", events=3, pileup=0, seed=1,
+            prod_root=tmp_path, output_dir=tmp_path / "out", run_id="0", events=3, pileup=0, seed=1,
         )
-        assert yaml.safe_load((tmp_path / new[0]["config_path"]).read_text()) == {
+        assert yaml.safe_load(_host_path(tmp_path / "out", new[0]["config_path"]).read_text()) == {
             "events": 3, "threads": 8, "processes": 5,
         }
+
+    @pytest.mark.parametrize("run_id,expected", [
+        ("0", "/output/runs/all/0/events.hepmc.gz"),
+        ("7", "/output/runs/all/7/events.hepmc.gz"),
+        ("scan-a", "/output/runs/scan-a/events.hepmc.gz"),
+    ])
+    def test_overlay_points_pythia_at_the_madgraph_output(
+        self, tmp_path: Path, run_id: str, expected: str
+    ) -> None:
+        import yaml
+
+        from colliderml.simulate.api import _apply_runtime_overrides
+
+        (tmp_path / "pythia.yaml").write_text(
+            yaml.safe_dump({"events": 10, "hard_scatter_file": "/output/runs/all/0/events.hepmc.gz"})
+        )
+        new = _apply_runtime_overrides(
+            [{"stage": "pythia_generation", "config_path": "pythia.yaml"}],
+            prod_root=tmp_path, output_dir=tmp_path / "out", run_id=run_id, events=3, pileup=0, seed=1,
+        )
+        cfg = yaml.safe_load(_host_path(tmp_path / "out", new[0]["config_path"]).read_text())
+        assert cfg["hard_scatter_file"] == expected
