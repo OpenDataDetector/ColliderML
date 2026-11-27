@@ -283,6 +283,13 @@ def clone_colliderml_production(
             "Check the network connection, or delete that directory to clone it again."
         )
 
+    if clone_dir.exists():
+        # Not a git checkout: leave it alone rather than clone into it or delete it.
+        raise ContainerRuntimeError(
+            f"{clone_dir} exists but is not a git checkout. Move or delete it, "
+            "and the next run clones the pipeline code there."
+        )
+
     # Fresh clone.
     root.mkdir(parents=True, exist_ok=True)
     print(f"Cloning {COLLIDERML_PRODUCTION_REPO} @ {target_ref} into {clone_dir} ...")

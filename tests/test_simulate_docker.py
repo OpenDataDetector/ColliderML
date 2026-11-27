@@ -287,6 +287,18 @@ def test_fresh_clone_of_an_unknown_ref_is_an_error_and_leaves_nothing(
     assert not (tmp_path / "colliderml-production").exists()
 
 
+def test_existing_directory_without_git_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    keep = tmp_path / "colliderml-production" / "notes.txt"
+    keep.parent.mkdir()
+    keep.write_text("mine")
+    monkeypatch.setattr(docker_mod.subprocess, "run", lambda *a, **k: pytest.fail("git was called"))
+    with pytest.raises(ContainerRuntimeError, match="is not a git checkout"):
+        clone_colliderml_production(cache_root=tmp_path, ref="pipeline-v9")
+    assert keep.read_text() == "mine"
+
+
 def test_clone_needs_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(docker_mod.shutil, "which", lambda name: None)
     with pytest.raises(ContainerRuntimeError, match="git is not installed"):
