@@ -18,19 +18,23 @@ Every stage runs in a container, so there is no physics software to install.
 | Software | Python 3.10 or newer, `git`, and Docker or Podman (`podman-hpc` on HPC systems, see [below](#on-an-hpc-system-with-podman-hpc)) |
 | CPU | x86-64 with AVX2. ARM machines, Apple Silicon included, are not supported |
 | Disk | About 40 GB: the two images are 6 GB and 27 GB once unpacked, the Geant4 data 2 GB, and ten events without pile-up 0.4 GB |
-| Memory | The ten-event run peaked at 2.3 GB. Pile-up needs much more, see [below](#more-events-more-pile-up) |
+| Memory | In the ten-event run the processes together used at most 2.3 GB (resident memory, sampled every 2 s). Pile-up needs much more, see [below](#more-events-more-pile-up) |
 | Network | For the first run: the images, the pipeline code and the Geant4 data are downloaded. Later runs still contact GitHub to check the pipeline version, and use the local copy when offline |
 
 The numbers on this page come from one test on a single machine (a node of
-NERSC Perlmutter, AMD EPYC 7763, with `podman-hpc`). They show what to expect
-and are not tested minimum requirements. The chain has not yet been run with
-Docker or plain Podman; please report what you find.
+NERSC Perlmutter, AMD EPYC 7763, with `podman-hpc`), run through the
+pipeline's own script with the settings the commands below use. They show
+what to expect and are not tested minimum requirements. The chain has not yet
+been run with Docker or plain Podman; please report what you find.
 
 ## Install
 
 ```bash
 pip install "colliderml[sim]"
 ```
+
+Particle flow needs `colliderml` 0.5.0 or later (`colliderml list-presets`
+must show `ttbar-pflow-quick`).
 
 ## Run
 
@@ -124,8 +128,9 @@ ttbar_pflow/
 └── pipeline_timing.csv
 ```
 
-The ten tables take 17 MB for these ten events; the intermediate files in
-`runs/0/` take the other 0.4 GB and can be deleted.
+For these ten events the tables take 17 MB, the intermediate files in
+`runs/0/` 173 MB and the MadGraph process 230 MB. Only `parquet/` is needed
+for analysis.
 
 Each table is one parquet file with one row per event. Every column except
 `event_id` is a list with one entry per object. The tables are linked by ids
@@ -147,6 +152,8 @@ Two things to know when you join:
 - `generator_particles` is a subset of `particles` with the same
   `particle_id`: the particles of the hard scatter that the generator
   produced before the final state (the tops, the W bosons, the showers).
+- `color_a` and `color_b` are 0 for every particle: the simulation output
+  of this pipeline carries no colour-flow information.
 
 Here we read the particle-flow objects and the tracks, and count the charged
 objects per event:
@@ -185,8 +192,8 @@ Our test run printed (momenta in GeV):
 9         9     187         32  378.065125        33
 ```
 
-Your numbers will differ in detail: with two threads the events are not
-reproduced bit for bit.
+Expect your numbers to differ in detail. We have not tested whether a
+second run with the same seed gives the same events.
 
 `SimulationResult.tables()` returns the same files by table name, if you
 would rather not build the paths by hand.
@@ -227,12 +234,12 @@ two threads, two Pandora processes) on the same machine:
 | Parquet Packaging | 7 s | 1.0 GB |
 | Whole run | 37 min 49 s | |
 
-The whole run peaked at 11.5 GB of memory and wrote 1.8 GB, of which the
-tables are 160 MB. These two events have 1,500 tracks and 5,800
-particle-flow objects each.
+The processes of this run together used at most 11.5 GB, during the
+detector simulation. The run wrote 1.8 GB, of which the tables are 160 MB.
+These two events have 1,500 tracks and 5,800 particle-flow objects each.
 
-Each Pandora process used 5.6 GB here. Keep `--pandora-processes` times that
-below your free memory.
+The larger of the two Pandora processes used 5.6 GB, for one event. Keep
+`--pandora-processes` times that below your free memory.
 
 ## On an HPC system with podman-hpc
 
@@ -260,10 +267,11 @@ Run the simulation on a compute node.
 | Limitation | What it means for you |
 | :-- | :-- |
 | No vertex-to-track links with the public sim image | `reco/vertices` has the vertex positions, covariances and track counts. The columns `track_ids`, `track_weights`, `truth_interaction` and `truth_interaction_dz` need an ACTS writer that the public image does not have yet. With an image that has it (`--image`), the pipeline writes them |
-| Simpler ttbar process than the released samples | This pipeline generates `p p > t t~` at NLO without extra jets. The released samples use FxFx-merged multi-jet matrix elements. In our ten events we found 46 tracks and 215 particle-flow objects per event on average, against 62 and 268 in the released-format pilot sample |
+| Simpler ttbar process than the released samples | This pipeline generates `p p > t t~` at NLO without extra jets. The released samples use FxFx-merged multi-jet matrix elements. Our ten events have fewer tracks and particle-flow objects per event than the released-format pilot sample (46 and 215 against 62 and 268). We have not shown that the process alone explains the difference |
 | x86-64 only | There are no ARM builds of either image |
 | One run per output directory, one file per table | `simulate()` writes all events into a single run. For more than a few hundred events with pile-up, make several calls with different `seed` and `output_dir` |
 | Two threads at least | With one thread the Geant4 step of the current sim image writes every event twice, so `--threads 1` is refused |
+| `truth/particles` at pile-up | Every particle of the event is in the table, with 30 columns, at any pile-up. The released pile-up 200 pilot sample has the 18-column Release 1 particle table there |
 | No remote particle flow | `remote=True` stops after tracking |
 | Docker writes files as root | With Docker (Podman is not affected) the output belongs to root. Change the owner afterwards: `sudo chown -R $USER ./ttbar_pflow` |
 

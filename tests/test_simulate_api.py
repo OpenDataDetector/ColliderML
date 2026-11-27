@@ -68,6 +68,9 @@ def _write_stage_configs(prod_root: Path, channel: str, stages: List[str]) -> No
     by_id = {s.stage: s for s in CHANNEL_STAGES[channel]}
     for stage in stages:
         (cfg_dir / by_id[stage].config).write_text("events: 10\n")
+        script = prod_root / "scripts" / by_id[stage].script
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("")
 
 
 def test_manifest_carries_image_and_stops_after_tracking_by_default(tmp_path: Path) -> None:
@@ -89,9 +92,19 @@ def test_manifest_refuses_a_checkout_without_a_stage_config(tmp_path: Path) -> N
     with pytest.raises(FileNotFoundError, match="stage 'particles_full'"):
         generate_stage_manifest("higgs_portal", prod_root=tmp_path, particle_flow=True)
 
-    (tmp_path / "configs_development/docker_test/higgs_portal/digitization_config.yaml").unlink()
-    with pytest.raises(FileNotFoundError, match="stage 'digitization'"):
+    (tmp_path / "scripts/simulation/digi_and_reco.py").unlink()
+    with pytest.raises(FileNotFoundError, match="scripts/simulation/digi_and_reco.py not found"):
         generate_stage_manifest("higgs_portal", prod_root=tmp_path)
+
+    (tmp_path / "configs_development/docker_test/higgs_portal/simulation_config.yaml").unlink()
+    with pytest.raises(FileNotFoundError, match="stage 'simulation'"):
+        generate_stage_manifest("higgs_portal", prod_root=tmp_path)
+
+
+def test_a_channel_without_docker_configs_is_an_error(tmp_path: Path) -> None:
+    (tmp_path / "configs_production" / "templates").mkdir(parents=True)
+    with pytest.raises(FileNotFoundError, match="No config directory for channel 'ttbar'"):
+        generate_stage_manifest("ttbar", prod_root=tmp_path)
 
 
 def _install_simulate_stubs(
@@ -335,6 +348,16 @@ def test_simulate_refuses_an_output_directory_with_a_run(
     simulate(preset="ttbar-pflow-quick", output_dir=tmp_path / "out", quiet=True)
     with pytest.raises(FileExistsError, match="already holds a run"):
         simulate(preset="ttbar-pflow-quick", seed=7, output_dir=tmp_path / "out", quiet=True)
+    assert len(captured["run_pipeline"]) == 1
+
+
+def test_particle_flow_needs_the_output_directory_to_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _install_simulate_stubs(monkeypatch, tmp_path)
+    simulate(preset="ttbar-quick", output_dir=tmp_path / "out", run_id="1", quiet=True)
+    with pytest.raises(FileExistsError, match="already holds a run"):
+        simulate(preset="ttbar-pflow-quick", output_dir=tmp_path / "out", quiet=True)
     assert len(captured["run_pipeline"]) == 1
 
 

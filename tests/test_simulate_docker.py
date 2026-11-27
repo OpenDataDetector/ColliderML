@@ -270,3 +270,23 @@ def test_cached_clone_that_cannot_reach_the_ref_is_an_error(
     _fake_git(monkeypatch, {"fetch": 1, "checkout": 1})
     with pytest.raises(ContainerRuntimeError, match="Could not check out 'pipeline-v9'"):
         clone_colliderml_production(cache_root=tmp_path, ref="pipeline-v9")
+
+
+@pytest.mark.integration
+def test_clone_colliderml_production_fetches_repo(tmp_path: Path) -> None:
+    """Really clone the production repo at the pinned ref into a scratch dir.
+
+    Marked integration because it needs GitHub network access (~30 s for a
+    shallow clone). It also checks the stage list of this library against the
+    scripts and configs of the pinned checkout.
+    """
+    from colliderml.simulate.pipeline import CHANNEL_STAGES, generate_stage_manifest
+
+    clone = clone_colliderml_production(cache_root=tmp_path)
+    assert clone.is_dir()
+    assert (clone / ".git").exists()
+    assert (clone / docker_mod.STAGE_ENV_SCRIPT).exists()
+    assert (clone / docker_mod.STAGE_TIMER_SCRIPT).exists()
+    for channel, stages in CHANNEL_STAGES.items():
+        manifest = generate_stage_manifest(channel, prod_root=clone, particle_flow=True)
+        assert [m["stage"] for m in manifest] == [s.stage for s in stages]

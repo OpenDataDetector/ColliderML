@@ -399,7 +399,9 @@ def run_stage(
         raise ContainerRuntimeError(
             f"{prod_root} has no {STAGE_ENV_SCRIPT}: this colliderml-production "
             f"checkout is older than {COLLIDERML_PRODUCTION_REF}, which this version "
-            "of colliderml needs. Delete the checkout to let simulate() re-clone it."
+            "of colliderml needs. If it is the checkout in the colliderml cache, delete "
+            "it and simulate() clones it again; if it is your own (prod_root=...), "
+            "update it."
         )
 
     stage_label = stage or Path(script).stem

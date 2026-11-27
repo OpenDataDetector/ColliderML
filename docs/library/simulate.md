@@ -44,7 +44,7 @@ Runs the full pipeline for one (channel, events, pileup) configuration.
   defining a new one.
 - `output_dir` defaults to
   `./colliderml_output/<channel>_pu<pileup>_<events>evt/`.
-- `seed` is forwarded to every stage so the full run is reproducible.
+- `seed` is forwarded to every stage. Whether two runs with the same seed give identical events has not been tested with the two-thread default.
 - `image` is the sim image (generation, Geant4, ACTS tracking, packaging)
   and `reco_image` the reco image (calorimeter digitisation and Pandora).
   Both default to the [pinned versions](#pinned-pipeline-versions).

@@ -26,10 +26,9 @@ class Stage:
 
     Attributes:
         name: Human-readable name for CLI progress reporting.
-        stage: Machine identifier used by the pipeline runner
-            (e.g. ``"pythia_generation"``). Matches the hook in
-            :mod:`~colliderml.simulate.docker` that copies MadGraph output
-            across run directories.
+        stage: Machine identifier (e.g. ``"pythia_generation"``): the
+            ``stage`` key of the stage's YAML config and its label in
+            ``pipeline_timing.csv``.
         script: Path *relative to* ``scripts/`` in the production repo
             (e.g. ``"simulation/pythia_gen.py"``).
         config: YAML filename inside the channel's config directory
@@ -178,13 +177,9 @@ def list_channels() -> List[str]:
 def find_config_dir(channel: str, prod_root: Path) -> Path:
     """Find the stage-config directory for ``channel`` inside a production clone.
 
-    The search order mirrors the pattern used by the production repo's own
-    scripts:
-
-    1. ``<prod_root>/configs_development/docker_test/<channel>/`` — complete
-       per-channel configs (preferred).
-    2. ``<prod_root>/configs_production/templates/`` — shared templates
-       (fallback for channels without dedicated dev configs).
+    It is ``<prod_root>/configs_development/docker_test/<channel>/``: the
+    configs written for single-machine container runs, with container paths
+    only.
 
     Args:
         channel: Physics channel name.
@@ -196,18 +191,15 @@ def find_config_dir(channel: str, prod_root: Path) -> Path:
         Path to the config directory.
 
     Raises:
-        FileNotFoundError: If neither candidate directory exists.
+        FileNotFoundError: If the directory does not exist.
     """
     dev_dir = prod_root / "configs_development" / "docker_test" / channel
     if dev_dir.is_dir():
         return dev_dir
-    templates_dir = prod_root / "configs_production" / "templates"
-    if templates_dir.is_dir():
-        return templates_dir
     raise FileNotFoundError(
-        f"No config directory found for channel '{channel}'. Searched: "
-        f"{dev_dir}, {templates_dir}. Is the colliderml-production clone at "
-        f"{prod_root} complete? Try deleting it and letting simulate() re-clone."
+        f"No config directory for channel '{channel}' at {dev_dir}. The "
+        f"colliderml-production checkout at {prod_root} does not match this "
+        "version of colliderml."
     )
 
 
@@ -219,9 +211,9 @@ def generate_stage_manifest(
 ) -> List[Dict[str, str]]:
     """Assemble the list of (script, config) pairs to execute for a channel.
 
-    Every stage of the channel must have its config YAML in the production
-    checkout: a chain that silently skipped a stage would look like a
-    successful, shorter run.
+    Every stage of the channel must have its script and its config YAML in
+    the production checkout: a chain that silently skipped a stage would
+    look like a successful, shorter run.
 
     Args:
         channel: Physics channel name.
@@ -236,7 +228,7 @@ def generate_stage_manifest(
         mounts ``prod_root`` as ``/workspace``).
 
     Raises:
-        FileNotFoundError: If the checkout lacks the config of a stage.
+        FileNotFoundError: If the checkout lacks the script or the config of a stage.
     """
     stages = get_channel_stages(channel, particle_flow=particle_flow)
     config_dir = find_config_dir(channel, prod_root)
@@ -249,6 +241,12 @@ def generate_stage_manifest(
                 f"{config_file} not found: the colliderml-production checkout at "
                 f"{prod_root} has no config for stage '{stage.stage}' of channel "
                 f"'{channel}'. It probably does not match the pinned pipeline release."
+            )
+        if not (prod_root / "scripts" / stage.script).is_file():
+            raise FileNotFoundError(
+                f"scripts/{stage.script} not found in the colliderml-production checkout "
+                f"at {prod_root} (stage '{stage.stage}'). It probably does not match the "
+                "pinned pipeline release."
             )
         manifest.append(
             {

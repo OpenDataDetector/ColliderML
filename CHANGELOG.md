@@ -18,6 +18,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   - The run directory's `tracker_hits` table now holds the digitised clusters. The Geant4 hits it held before are in the new `tracker_simhits` table. Code that read `tracker_hits` from a 0.4.2 run reads different content under the same name.
   - A `truth_tracks` table is added. The `calo_hits` table is no longer written (calorimeter cells come from the particle-flow stages).
   - The detector description is ODD v6.0.2 (0.4.2: v5.0.0).
+  - The MadGraph output stays in `runs/all/<run_id>/events.hepmc.gz`; it is no longer copied into the run directory.
   - Tracking seeds at the 3 T detector field with a seed minimum pT of 0.65 GeV, and AMVF vertexing runs.
 - [library] Geant4 and ACTS run with 2 threads by default, and `threads=1` is refused: with one thread the Geant4 step of the pinned sim image writes every event twice.
 - [library] `simulate()` refuses an output directory that already holds the run (`FileExistsError`), validates `run_id`, and fails if the production checkout lacks the config of a stage instead of skipping it.

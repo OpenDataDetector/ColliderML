@@ -69,9 +69,10 @@ On first invocation, `simulate()` will:
 4. **Download the Geant4 physics tables** (~2 GB) into the same cache
    directory, from inside the container. The detector geometry and the
    MadGraph/Pythia bridge are part of the image.
-5. **Run each pipeline stage** in order. Progress is printed to stdout;
-   the first stage typically takes a few seconds, detector sim is the
-   long pole (~10 minutes for 10 events).
+5. **Run each pipeline stage** in order. Progress is printed to stdout.
+   For `ttbar-quick`, the first stage (MadGraph Init) is the longest: it
+   took 6 to 8 minutes in our tests, the detector simulation of 10 events
+   about 2.5 minutes.
 6. **Return a `SimulationResult`** with paths to the outputs.
 
 Everything cached in step 2–4 persists between runs, so the *second*
@@ -107,7 +108,7 @@ colliderml list-presets
 
 | File | Stage | Format |
 | :-- | :-- | :-- |
-| `events.hepmc.gz` | MadGraph (ttbar only) | HepMC2 |
+| `../all/0/events.hepmc.gz` | MadGraph (ttbar only; next to the run directory) | HepMC2 |
 | `merged_events.hepmc3` | Pythia + pileup | HepMC3 |
 | `edm4hep.root` | DDSim / Geant4 | EDM4hep ROOT |
 | `measurements.root` | Digitisation | ACTS ROOT |

@@ -149,8 +149,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=__import__("sys").stderr)
         return 2
-    except (RuntimeError, OSError) as exc:
-        # container runtime, clone, image, existing output directory, failed stage
+    except (RuntimeError, OSError, __import__("subprocess").SubprocessError) as exc:
+        # container runtime, clone, image pull, existing output directory, failed stage
         print(f"error: {exc}", file=__import__("sys").stderr)
         return 1
     if use_remote:

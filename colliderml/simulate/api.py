@@ -148,7 +148,9 @@ def _apply_runtime_overrides(
     import yaml
 
     overlay_root = output_dir / OVERLAY_SUBDIR / run_id
-    overlay_root.mkdir(parents=True, exist_ok=True)
+    # Not exist_ok: creating the directory reserves the run, so a second call that
+    # passed the check in simulate() at the same moment stops here.
+    overlay_root.mkdir(parents=True)
 
     # madgraph_gen.py stages its unsplit output under runs/all/<run>/ for a
     # numeric run id and in the run directory itself otherwise.
@@ -399,9 +401,12 @@ def simulate(
         else _default_output_dir(resolved_channel, resolved_pileup, resolved_events)
     )
     # Stages pick up files by name, so leftovers of an earlier run would be mixed in.
-    leftovers = [out_dir / "runs" / run_id, out_dir / OVERLAY_SUBDIR / run_id]
+    # A particle-flow run packages every run directory it finds, so it needs the output
+    # directory to itself.
     if use_particle_flow:
-        leftovers.append(out_dir / "parquet")
+        leftovers = [out_dir / "runs", out_dir / OVERLAY_SUBDIR, out_dir / "parquet"]
+    else:
+        leftovers = [out_dir / "runs" / run_id, out_dir / OVERLAY_SUBDIR / run_id]
     existing = [str(p) for p in leftovers if p.exists()]
     if existing:
         raise FileExistsError(
