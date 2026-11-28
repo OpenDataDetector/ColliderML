@@ -30,6 +30,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - [library] Stages no longer have a two-hour timeout.
 
 ### Fixed
+- [library] `collect_tables()` works with Polars 2.0, which removed `LazyFrame.collect(streaming=...)`; it uses `engine="streaming"` where that exists.
+- [library] `subsample_pileup()` no longer keeps two per-event lists on every calorimeter cell row. On 200 ttbar events without pile-up its memory went past 300 GB; it now needs about 10 GB.
+- [library] The CKF tracking baseline reads the `tracks` table of a `simulate` run directory (`runs/0/tracks`). It looked for flat files that the pipeline no longer writes. The flat-file input still works.
 - [library] A `colliderml-production` cache directory that is not a git checkout is left alone with an error. Before, a failed clone into it could delete it.
 - [library] `colliderml simulate` without `--image` passed `None` as the image name; it now uses the pinned image.
 - [library] `colliderml.simulate(...)` raised `TypeError: 'module' object is not callable` once anything had imported the `colliderml.simulate` subpackage; it is now callable in any import order.

@@ -28,7 +28,7 @@ presets:
     events: 10
     pileup: 0
     particle_flow: true
-    description: "ttbar, 10 events, no pileup, with particle flow (~12 min)"
+    description: "ttbar, 10 events, no pileup, with particle flow (~11 min)"
 
   higgs-portal-quick:
     channel: higgs_portal

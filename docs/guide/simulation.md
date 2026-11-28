@@ -36,7 +36,7 @@ a shared cluster. To hand the work to the ColliderML backend instead, see
 | Software | Python 3.10 or newer, `git`, and Docker, Podman or `podman-hpc` (see [HPC systems](#on-an-hpc-system-with-podman-hpc)) |
 | CPU | x86-64 with AVX2. ARM machines, Apple Silicon included, are not supported |
 | Disk | About 40 GB with particle flow: the two images take 6 GB and 27 GB once unpacked, the Geant4 data 2 GB, and ten events without pile-up 0.4 GB. Tracking only: about 9 GB |
-| Memory | Ten events without pile-up used at most 2.3 GB. Pile-up needs much more, see [below](#more-events-more-pile-up) |
+| Memory | In ten events without pile-up the largest process used 2.2 GB. Pile-up needs much more, see [below](#more-events-more-pile-up) |
 | Network | For the first run, to download the images, the pipeline code and the Geant4 data. Later runs reuse the local copies |
 
 The timings and memory numbers on this page come from one machine (a node of
@@ -122,23 +122,25 @@ Steps 2 to 4 happen once; later runs start with the stages.
 ## How long it takes
 
 `ttbar-pflow-quick` uses two threads for Geant4 and ACTS and one Pandora
-process. With the images and the Geant4 data already in place:
+process. We ran it with the images already pulled and an empty cache, so the
+whole-run time includes the clone of the pipeline code and the Geant4 data
+download:
 
 | Stage | Wall time | Largest process |
 | :-- | --: | --: |
-| MadGraph Init | 6 min 36 s | 1.0 GB |
-| MadGraph Generation | 15 s | 0.4 GB |
-| Pythia Generation | 1 s | 0.3 GB |
-| Detector Simulation | 2 min 23 s | 2.2 GB |
-| Digitization & Reconstruction | 17 s | 1.7 GB |
-| Truth Particle Tables | 3 s | 0.5 GB |
-| Calorimeter Digitization & Particle Flow | 38 s | 1.9 GB |
-| Calorimeter & Particle Flow Tables | 7 s | 0.5 GB |
-| Parquet Packaging | 3 s | 0.8 GB |
-| Whole run, container start-up included | 12 min 24 s | |
+| MadGraph Init | 4 min 50 s | 1.2 GB |
+| MadGraph Generation | 14 s | 0.4 GB |
+| Pythia Generation | under 1 s | 0.3 GB |
+| Detector Simulation | 2 min 18 s | 2.2 GB |
+| Digitization & Reconstruction | 13 s | 1.7 GB |
+| Truth Particle Tables | 2 s | 0.4 GB |
+| Calorimeter Digitization & Particle Flow | 13 s | 2.0 GB |
+| Calorimeter & Particle Flow Tables | 4 s | 0.4 GB |
+| Parquet Packaging | 2 s | 0.7 GB |
+| Whole run, first run in a new cache | 10 min 52 s | |
 
 MadGraph Init compiles and integrates the NLO process. Its cost does not
-depend on the number of events, so it is half of a ten-event run and a small
+depend on the number of events, so it is close to half of a ten-event run and a small
 part of a large one. It uses every core it finds (128 on the test machine),
 so expect it to take longer on a laptop.
 
@@ -265,20 +267,20 @@ We measured this command on the same machine:
 
 | Stage | Wall time | Largest process |
 | :-- | --: | --: |
-| MadGraph Init, MadGraph Generation | 8 min 10 s | 1.0 GB |
-| Pythia Generation (with the pile-up interactions) | 19 s | 0.3 GB |
-| Detector Simulation | 12 min 48 s | 11.3 GB |
-| Digitization & Reconstruction | 1 min 37 s | 7.4 GB |
-| Truth Particle Tables | 9 s | 1.0 GB |
-| Calorimeter Digitization & Particle Flow | 12 min 16 s | 5.6 GB per process |
-| Calorimeter & Particle Flow Tables | 13 s | 1.3 GB |
-| Parquet Packaging | 7 s | 1.0 GB |
-| Whole run | 37 min 49 s | |
+| MadGraph Init, MadGraph Generation | 5 min 7 s | 1.0 GB |
+| Pythia Generation (with the pile-up interactions) | 8 s | 0.3 GB |
+| Detector Simulation | 11 min 49 s | 11.3 GB |
+| Digitization & Reconstruction | 58 s | 7.5 GB |
+| Truth Particle Tables | 6 s | 0.9 GB |
+| Calorimeter Digitization & Particle Flow | 28 s | 5.4 GB per process |
+| Calorimeter & Particle Flow Tables | 10 s | 1.1 GB |
+| Parquet Packaging | 4 s | 0.9 GB |
+| Whole run | 20 min 29 s | |
 
-The run wrote 1.8 GB, of which the tables are 160 MB. These two events have
-1,500 tracks and 5,800 particle-flow objects each. A Pandora process needs
-up to 5.6 GB for one pile-up 200 event, so keep `--pandora-processes` times
-that below your free memory.
+The run wrote 1.7 GB, of which the tables are 160 MB. These two events have
+1,500 tracks and 5,800 particle-flow objects each. A Pandora process needed
+up to 6.3 GiB for one pile-up 200 event in our tests of the reconstruction
+image, so keep `--pandora-processes` times that below your free memory.
 
 ## Presets versus explicit parameters
 
@@ -353,7 +355,7 @@ the released data, keep the pinned versions.
 | Limitation | What it means for you |
 | :-- | :-- |
 | No vertex-to-track links with the public sim image | `reco/vertices` has the vertex positions, covariances and track counts. The columns `track_ids`, `track_weights`, `truth_interaction` and `truth_interaction_dz` need an ACTS writer that the public image does not have yet |
-| Simpler ttbar process than the released samples | This pipeline generates `p p > t t~` at NLO without extra jets; the released samples use FxFx-merged multi-jet matrix elements. Our ten events have fewer tracks and particle-flow objects per event than the released-format sample (46 and 215 against 62 and 268) |
+| Simpler ttbar process than the released samples | This pipeline generates `p p > t t~` at NLO without extra jets; the released samples use FxFx-merged multi-jet matrix elements. Our ten events have fewer tracks and particle-flow objects per event than the released-format sample (46 and 213 against 62 and 268) |
 | x86-64 only | There are no ARM builds of either image |
 | One run per output directory, one file per table | For more than a few hundred events with pile-up, make several calls with different `seed` and `output_dir` |
 | Two threads at least | With one thread the Geant4 step of the current sim image writes every event twice, so `--threads 1` is refused |
