@@ -43,8 +43,8 @@ model to the zoo.
 
 ## What you can do
 
-- **Load** pre-generated events: `colliderml.load("ttbar_pu0")` — downloads on first call, then caches.
-- **Simulate** new events yourself: [`colliderml.simulate(preset="ttbar-quick")`](/guide/simulation) — runs the full Pythia → Geant4 → ACTS pipeline locally, or submit to the SaaS backend with `remote=True`.
+- Load pre-generated events with `colliderml.load("ttbar_pu0", max_events=200)`, which downloads on first call and then caches.
+- **Simulate** new events yourself: [`colliderml.simulate(preset="ttbar-pflow-quick")`](/guide/simulation) runs the full chain locally, from generation through Geant4 and tracking to Pandora particle flow, or submit to the ColliderML backend with `remote=True`.
 - **Score** your models against benchmark tasks: [`colliderml.tasks.evaluate(...)`](/guide/tasks) — six built-in tasks covering tracking, jets, anomaly detection, and systems constraints.
 - **Explore** interactively: use the [event display](https://huggingface.co/spaces/murnanedaniel/colliderml-event-display) or the [leaderboard](https://huggingface.co/spaces/murnanedaniel/colliderml-leaderboard) HuggingFace Spaces.
 

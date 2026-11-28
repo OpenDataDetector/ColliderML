@@ -118,7 +118,7 @@ def test_top_level_exports_present() -> None:
     assert hasattr(colliderml, "balance")      # resolved via __getattr__
     assert hasattr(colliderml, "tasks")        # resolved via __getattr__
     assert hasattr(colliderml, "remote")       # resolved via __getattr__
-    assert colliderml.__version__.startswith("0.4.")
+    assert colliderml.__version__.startswith("0.5.")
 
 
 def test_top_level_getattr_unknown_attribute_raises() -> None:

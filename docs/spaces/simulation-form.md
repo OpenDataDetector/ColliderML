@@ -66,9 +66,8 @@ message but the rest of the Space still works.
 | `COLLIDERML_BACKEND` | Backend URL; defaults to `https://api.colliderml.com` |
 | `ANTHROPIC_API_KEY` | Needed for the Chat tab; without it the tab degrades gracefully |
 
-See the
-[sync-spaces workflow docs](../internal/deployment.md#space-secrets)
-for how to set these after the first automated sync.
+Set these in the Space settings on HuggingFace after the first automated
+sync (see [Deployment workflow](./overview.md#deployment-workflow)).
 
 ## Running it locally
 

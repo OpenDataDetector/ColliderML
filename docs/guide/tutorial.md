@@ -23,10 +23,10 @@ doubles as a conceptual map.
 | | |
 |---|---|
 | **Python** | 3.10 or newer. |
-| **Install** | `pip install --pre 'colliderml[all]'`  (pre-release until `0.4.0` final; drop `--pre` once it ships). |
+| **Install** | `pip install 'colliderml[all]'` |
 | **Disk headroom** | ~2 GB for the Chapter 1 dataset slice. |
-| **Chapter 2** | Docker or Podman on `$PATH`, plus ~12 GB for the pipeline container and Geant4 datasets (one-time download). |
-| **Chapters 3–4** | The ColliderML backend must be reachable. In production this is `api.colliderml.com` (the default). For local development, see the [operator note](#running-the-backend-yourself) at the bottom of this page. |
+| **Chapter 2** | Docker or Podman on `$PATH`, plus about 9 GB for the sim image and the Geant4 data (one-time download). |
+| **Chapters 3–4** | The ColliderML backend must be reachable. In production this is `https://colliderml-backend.onrender.com` (the default). For local development, see the [operator note](#running-the-backend-yourself) at the bottom of this page. |
 | **Chapters 3–5** | A HuggingFace account and a token (`huggingface-cli login`). |
 
 If you're on a machine with a tight `$HOME` quota (e.g. NERSC
@@ -64,9 +64,10 @@ stack.
 
 The canonical ColliderML datasets live at
 [`CERN/ColliderML-Release-1`](https://huggingface.co/datasets/CERN/ColliderML-Release-1).
-Each config is named `<channel>_<pileup>`, e.g. `ttbar_pu0` or
-`higgs_portal_pu200`. The library's `load()` handles cache-aware
-download and Polars loading in one call.
+Each HuggingFace config is one table of one sample, named
+`<channel>_<pileup>_<table>`, e.g. `ttbar_pu0_tracker_hits`. The
+library's `load()` takes the sample name (`ttbar_pu0`) and a list of
+tables, and handles cache-aware download and Polars loading in one call.
 
 ```python
 from colliderml.core.hf_download import discover_remote_configs
@@ -81,7 +82,7 @@ frames = colliderml.load(
     max_events=200,
 )
 row = frames["tracker_hits"].row(0, named=True)
-print("event_id:", row["event_id"], "number of hits:", len(row["hit_id"]))
+print("event_id:", row["event_id"], "number of hits:", len(row["x"]))
 ```
 
 ### What just happened
@@ -93,10 +94,10 @@ print("event_id:", row["event_id"], "number of hits:", len(row["hit_id"]))
   parquet shards for the requested tables, downloaded any missing
   shards into `$COLLIDERML_DATA_DIR` (default `~/.cache/colliderml`),
   and loaded them with the Polars-backed loader.
-- `max_events=200` is an **in-memory slice**, not a download limit —
-  the full shard has to be fetched once, then we take the first 200
-  rows. For a tiny sample this is wasteful; for real workflows the
-  cache pays for itself from the second call onward.
+- `max_events=200` sets how many shards are downloaded (whole shards
+  only: here the first shard of each table, 1000 events and about
+  0.36 GB for these two tables), then keeps the first 200 events.
+  Later calls read the cached shards.
 
 The nested schema (one row per event, columns as lists across hits)
 is central to the library's performance story — Polars can lazily
@@ -124,8 +125,9 @@ Three knobs control what you actually generate:
   roughly linearly with pileup.
 
 For this chapter we set the three knobs explicitly to tiny values so
-the whole pipeline finishes in ~2 minutes. Bump them once you have
-time:
+the whole pipeline finishes in about 3 minutes once the images and the
+Geant4 data are in place (154 s on a Perlmutter CPU node). Bump them
+once you have time:
 
 ```python
 import colliderml
@@ -155,24 +157,25 @@ so the dimensions stay visible.
 On first call, `colliderml.simulate` did three things before running
 anything:
 
-1. **Detected the runtime** — `docker` preferred, `podman` fallback.
-2. **Cloned `colliderml-production@pipeline-v0.1.0`** into `.cache/`
-   for the pipeline scripts. This auto-clone pattern mirrors the one
-   already used for the ODD geometry and the MG5 ↔ Pythia8
-   interface.
-3. **Built the ODD detector geometry and downloaded Geant4
-   datasets** into the cache (both one-time, ~10 minutes combined).
+1. It detected the container runtime: `docker`, then `podman-hpc`,
+   then `podman`.
+2. It cloned the pipeline code (`colliderml-production`, at the version
+   pinned in `colliderml/simulate/pipeline_config.yaml`) into
+   `~/.cache/colliderml/simulate/`.
+3. It downloaded the Geant4 data (about 2 GB) into the same cache. The
+   ODD geometry comes with the sim image.
 
-Then for each stage (Pythia → DDSim → Digi + Reco → Parquet) it
-started a container with the pipeline script for that stage, mounted
-the run directory, and ran to completion. The `SimulationResult` you
-get back records which stages ran, how long each took, and where the
-outputs are.
+Then for each stage (Pythia Generation, Detector Simulation,
+Digitization & Reconstruction) it started a container with the pipeline
+script for that stage, mounted the output directory, and ran to
+completion. The `SimulationResult` you get back lists the stages that
+ran (`result.stages`) and where the outputs are; the wall time and peak
+memory of every stage are in `<output>/pipeline_timing.csv`.
 
-The **same** parquet output format that Chapter 1 downloaded from HF
-is what this pipeline writes locally, so you can round-trip a
-simulated sample through `colliderml.load()` without caring about
-the source.
+The tables follow the layout of the released dataset (one row per event,
+list columns), but `colliderml.load()` reads only the released dataset.
+Read your own tables with `pyarrow` or `pandas`, as in
+[What comes out](./simulation.md#what-comes-out).
 
 ---
 
@@ -534,7 +537,7 @@ Issues, questions, ideas:
 
 ::: details For operators and contributors — not needed for most users
 
-In production the backend runs at `api.colliderml.com` and the
+In production the backend runs at `https://colliderml-backend.onrender.com` and the
 library talks to it by default. If you're developing backend
 features, running integration tests, or want to demo the full
 stack locally, you can spin it up from the companion

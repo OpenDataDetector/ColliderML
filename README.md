@@ -55,7 +55,12 @@ import colliderml
 # Local: runs inside the OpenDataDetector software container.
 # Needs Docker or Podman; the `[sim]` extra provides the driver.
 result = colliderml.simulate(preset="ttbar-quick")
-print(result.run_dir)                  # parquet outputs land here
+print(result.run_dir)                  # stops after tracking; parquet outputs land here
+
+# Full chain with Pandora particle flow (from v0.5.0), down to the dataset tables.
+# Pulls a second, 27 GB image; see the Local Simulation guide.
+result = colliderml.simulate(preset="ttbar-pflow-quick", output_dir="./ttbar_pflow")
+print(result.tables()["pfos"])
 
 # Remote: submit to the SaaS backend (requires an HF token).
 # The `[remote]` extra pulls in requests; no container runtime needed.
@@ -98,8 +103,11 @@ Full docs: <https://opendatadetector.github.io/ColliderML>
 ## Development
 
 ```bash
-pytest -v -m "not integration"
+pytest -v -m "not slow and not integration and not pipeline"
 ```
+
+CI runs this selection; without `not slow` and `not pipeline`, the tests marked `sim` start real
+simulation containers when Docker or Podman is installed.
 
 Docs are built with VitePress: `npm ci --prefix docs && npm run --prefix docs docs:build`.
 

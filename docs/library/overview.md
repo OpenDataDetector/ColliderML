@@ -46,8 +46,12 @@ generate your own:
 
 ```python
 result = colliderml.simulate(preset="ttbar-quick")
-frames = colliderml.load("ttbar_pu0")   # still works — or read result.run_dir directly
+print(result.run_dir)   # your events, one directory per table
 ```
+
+`colliderml.load()` keeps reading the released dataset; read your own
+tables from `result.run_dir` (or `result.parquet_dir` for a particle-flow
+run), see [What comes out](/guide/simulation#what-comes-out).
 
 ## What you'll find here
 

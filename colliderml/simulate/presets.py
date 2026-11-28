@@ -1,7 +1,7 @@
 """Simulation presets.
 
 A *preset* is a named bundle of simulation parameters (channel, event count,
-pileup, estimated cost) that ships as package data inside this library. It
+pileup, whether particle flow runs) that ships as package data inside this library. It
 gives users a friendly shorthand for common workloads::
 
     colliderml simulate --preset ttbar-quick
@@ -34,6 +34,8 @@ class Preset:
         events: Number of events to simulate.
         pileup: Pileup level (``0`` means no pileup, ``200`` is HL-LHC).
         description: One-line human-readable summary (optional).
+        particle_flow: Run the full chain through Pandora particle flow and
+            the final parquet tables, instead of stopping after tracking.
     """
 
     name: str
@@ -41,6 +43,7 @@ class Preset:
     events: int
     pileup: int
     description: str = ""
+    particle_flow: bool = False
 
     def as_dict(self) -> Dict[str, Any]:
         """Return a plain dict view of the preset (for JSON/YAML dumps)."""
@@ -50,6 +53,7 @@ class Preset:
             "events": self.events,
             "pileup": self.pileup,
             "description": self.description,
+            "particle_flow": self.particle_flow,
         }
 
 
@@ -107,6 +111,7 @@ def load_presets() -> Dict[str, Preset]:
             events=int(events),
             pileup=int(pileup),
             description=str(description),
+            particle_flow=bool(spec.get("particle_flow", False)),
         )
     return out
 

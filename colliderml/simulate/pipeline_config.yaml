@@ -1,0 +1,24 @@
+# Versions of everything colliderml.simulate runs: the pipeline code and the two
+# container images. This file is the single place they are pinned.
+#
+# Each value can be overridden for one shell session with an environment variable:
+#   production_ref  COLLIDERML_PRODUCTION_REF
+#   sim_image       COLLIDERML_SIM_IMAGE
+#   reco_image      COLLIDERML_RECO_IMAGE
+# and the images per call with simulate(image=..., reco_image=...) or
+# `colliderml simulate --image ... --reco-image ...`.
+
+# Repository with the pipeline scripts and stage configs, cloned on first use.
+production_repo: "https://github.com/OpenDataDetector/ColliderML-Production.git"
+
+# Git tag (or branch, or commit) of that repository.
+production_ref: "pipeline-v0.3.0"
+
+# Generation, Geant4, ACTS digitisation and tracking, truth tables, packaging.
+# This is the sw:pr-8 build, pinned by digest.
+sim_image: "ghcr.io/opendatadetector/sw@sha256:31dc28312308e87d7406c1b494b1eed46e6ae743c3dc9f9bb239e45e9bc5f08c"
+
+# Calorimeter digitisation and Pandora particle flow. Only pulled for
+# particle_flow=True runs. This is colliderml-reco:20261127, pinned by digest
+# (recipe: image/colliderml-reco/ in the production repository).
+reco_image: "ghcr.io/opendatadetector/colliderml-reco@sha256:8ff91c13f21353ff04ee6924427a61dd3df523afa06b652072f7420efea24dd9"

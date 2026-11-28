@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="colliderml",
-    version="0.4.2",
+    version="0.5.0",
     description="A modern machine learning library for high-energy physics data analysis",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
@@ -52,7 +52,7 @@ setup(
     },
     include_package_data=True,
     package_data={
-        "colliderml.simulate": ["presets.yaml"],
+        "colliderml.simulate": ["presets.yaml", "pipeline_config.yaml"],
     },
     entry_points={
         "console_scripts": [

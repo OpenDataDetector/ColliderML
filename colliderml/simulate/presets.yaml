@@ -1,6 +1,6 @@
 # ColliderML simulation presets.
 #
-# A preset is a named bundle of (channel, events, pileup) used by
+# A preset is a named bundle of (channel, events, pileup, particle_flow) used by
 # ``colliderml simulate --preset <name>`` (CLI) and
 # ``colliderml.simulate(preset="<name>")`` (Python API).
 #
@@ -12,6 +12,8 @@
 #      ``colliderml/simulate/pipeline.py::CHANNEL_STAGES``.
 #   3. Keep ``description`` to one line so the CLI ``list-presets`` output
 #      stays readable.
+#   4. Set ``particle_flow: true`` to run the chain through Pandora particle
+#      flow and the final parquet tables (default: stop after tracking).
 
 presets:
   # --- Quick test presets (minutes on a workstation) -----------------------
@@ -20,6 +22,13 @@ presets:
     events: 10
     pileup: 0
     description: "ttbar, 10 events, no pileup (~15 min with full sim)"
+
+  ttbar-pflow-quick:
+    channel: ttbar
+    events: 10
+    pileup: 0
+    particle_flow: true
+    description: "ttbar, 10 events, no pileup, with particle flow (~11 min)"
 
   higgs-portal-quick:
     channel: higgs_portal
@@ -40,7 +49,7 @@ presets:
     pileup: 40
     description: "Higgs portal, 100 events, moderate pileup (~2 hrs)"
 
-  # --- Benchmark presets (submit to NERSC via remote=True) ----------------
+  # --- Benchmark presets (submit with remote=True) ------------------------
   ttbar-benchmark:
     channel: ttbar
     events: 1000
@@ -53,8 +62,5 @@ presets:
     pileup: 200
     description: "Higgs portal, 1000 events, full pileup (benchmark-scale)"
 
-# NOTE: the `single-muon` preset has been removed in v0.4.0. The
-# production single-muon dataset uses an ACTS particle-gun generator
-# (scripts/simulation/particlegun_gen.py), but pipeline.py currently
-# routes single_muon through pythia_generation. Will be reintroduced
-# in v0.4.1 once the channel-stage routing is fixed.
+# There is no single-muon preset: that channel needs a particle-gun stage,
+# which the local pipeline does not have.

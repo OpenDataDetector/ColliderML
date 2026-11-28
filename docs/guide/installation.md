@@ -14,9 +14,9 @@ pip install colliderml
 ```
 
 This will install ColliderML and its core dependencies:
-- `datasets` - HuggingFace datasets library for data loading
-- `numpy` - Numerical computing
-- `h5py` - HDF5 file support (for local data inspection)
+- `datasets` and `huggingface_hub` - downloads from the HuggingFace Hub
+- `polars`, `pyarrow` and `pandas` - reading and processing the parquet tables
+- `numpy`, `pyyaml` and `h5py`
 
 ## Install from Source
 
@@ -25,7 +25,7 @@ For development or to get the latest features:
 ```bash
 # Clone the repository
 git clone https://github.com/OpenDataDetector/ColliderML.git
-cd colliderml
+cd ColliderML
 
 # Install in development mode
 pip install -e .
@@ -52,9 +52,9 @@ pip install "colliderml[dev]"
 
 The `sim` extra pulls in only the Python dependencies required to drive
 the container runtime — the actual container image and supporting data
-are fetched on first use of `colliderml.simulate()`. See
-[Local Simulation](./simulation.md) for the full story and disk-space
-expectations.
+are fetched on first use of `colliderml.simulate()`, about 40 GB with
+particle flow. See [Local Simulation](./simulation.md) for how to run the
+full chain and what it needs.
 
 The `remote` extra installs the `requests` library and gives you
 `colliderml.remote.submit`, `status`, `balance`, and the integrated
@@ -96,15 +96,21 @@ Test your installation:
 import colliderml
 print(f"ColliderML version: {colliderml.__version__}")
 
-# Test loading a dataset
+# Read one event without downloading the whole dataset
 from datasets import load_dataset
 dataset = load_dataset(
     "CERN/ColliderML-Release-1",
     "ttbar_pu0_particles",
-    split="train"
+    split="train",
+    streaming=True,
 )
-print(f"Successfully loaded {len(dataset)} events")
+event = next(iter(dataset))
+print(f"Successfully loaded event {event['event_id']} with {len(event['particle_id'])} particles")
 ```
+
+This prints `Successfully loaded event 0 with 1846 particles`. Leave out
+`streaming=True` only if you want the whole configuration on disk: the
+`ttbar_pu0_particles` configuration alone is 223 GB.
 
 ## Troubleshooting
 
@@ -132,4 +138,4 @@ If you have an older version, consider using conda or pyenv to manage multiple P
 ## Next Steps
 
 - Continue to the [Quickstart Guide](./quickstart.md) to start using ColliderML
-- Learn about [Data Structure](./data-structure.md) and available datasets
+- See how the datasets are organised in [Understanding Dataset Structure](./quickstart.md#understanding-dataset-structure)

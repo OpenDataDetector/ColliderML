@@ -24,9 +24,13 @@ def _parse(argv: list[str]) -> Any:
 
 
 class _FakeSimulationResult:
-    def __init__(self, run_dir: str, remote_request_id: str | None = None) -> None:
+    def __init__(
+        self, run_dir: str, remote_request_id: str | None = None, particle_flow: bool = False
+    ) -> None:
         self.run_dir = run_dir
         self.remote_request_id = remote_request_id
+        self.particle_flow = particle_flow
+        self.parquet_dir = "/tmp/out/parquet"
 
 
 def test_simulate_parser_flags_round_trip() -> None:
@@ -82,6 +86,72 @@ def test_simulate_local_invokes_simulate(monkeypatch: pytest.MonkeyPatch) -> Non
     assert captured["quiet"] is True
 
 
+def test_simulate_particle_flow_flags_reach_simulate(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: Dict[str, Any] = {}
+
+    def fake_simulate(**kwargs: Any) -> _FakeSimulationResult:
+        captured.update(kwargs)
+        return _FakeSimulationResult(run_dir="/tmp/out/runs/0")
+
+    import colliderml.simulate as simulate_pkg
+
+    monkeypatch.setattr(simulate_pkg, "simulate", fake_simulate)
+
+    rc = main(
+        [
+            "simulate", "--channel", "ttbar", "--events", "2", "--pileup", "200",
+            "--particle-flow", "--reco-image", "reco:test", "--threads", "8",
+            "--pandora-processes", "2",
+        ]
+    )
+    assert rc == 0
+    assert captured["particle_flow"] is True
+    assert captured["reco_image"] == "reco:test"
+    assert captured["threads"] == 8
+    assert captured["pandora_processes"] == 2
+    assert captured["pileup"] == 200
+
+
+def test_simulate_runtime_flag_and_runtime_errors(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    captured: Dict[str, Any] = {}
+
+    def failing_simulate(**kwargs: Any) -> _FakeSimulationResult:
+        captured.update(kwargs)
+        raise FileExistsError("/tmp/out already holds a run")
+
+    import colliderml.simulate as simulate_pkg
+
+    monkeypatch.setattr(simulate_pkg, "simulate", failing_simulate)
+    rc = main(["simulate", "--preset", "ttbar-quick", "--runtime", "podman-hpc"])
+    assert rc == 1
+    assert captured["runtime"] == "podman-hpc"
+    assert "error: /tmp/out already holds a run" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("particle_flow,expected", [(True, "/tmp/out/parquet"), (False, "/tmp/out/runs/0")])
+def test_simulate_quiet_prints_only_the_output_location(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, particle_flow: bool, expected: str
+) -> None:
+    import colliderml.simulate as simulate_pkg
+
+    monkeypatch.setattr(
+        simulate_pkg, "simulate",
+        lambda **kw: _FakeSimulationResult(run_dir="/tmp/out/runs/0", particle_flow=particle_flow),
+    )
+    assert main(["simulate", "--preset", "ttbar-quick", "--quiet"]) == 0
+    assert capsys.readouterr().out.strip() == expected
+    assert main(["simulate", "--preset", "ttbar-quick"]) == 0
+    assert capsys.readouterr().out == ""  # simulate() itself reports when not quiet
+
+
+def test_simulate_particle_flow_flag_is_tristate() -> None:
+    assert _parse(["simulate", "--preset", "ttbar-quick"]).particle_flow is None
+    assert _parse(["simulate", "--preset", "ttbar-quick", "--particle-flow"]).particle_flow is True
+    assert _parse(["simulate", "--preset", "ttbar-quick", "--no-particle-flow"]).particle_flow is False
+
+
 def test_simulate_remote_invokes_simulate(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: Dict[str, Any] = {}
 
@@ -121,6 +191,8 @@ def test_list_presets_prints_entries(capsys: pytest.CaptureFixture) -> None:
     assert "ttbar-quick" in out
     assert "higgs-portal-quick" in out
     assert "channel=" in out
+    pflow_line = next(line for line in out.splitlines() if line.startswith("ttbar-pflow-quick"))
+    assert "pflow=yes" in pflow_line
 
 
 # ---------------------------------------------------------------------------

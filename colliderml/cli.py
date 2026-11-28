@@ -137,18 +137,28 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             seed=args.seed,
             output_dir=args.output,
             image=args.image,
+            reco_image=args.reco_image,
+            particle_flow=args.particle_flow,
+            threads=args.threads,
+            pandora_processes=args.pandora_processes,
             remote=use_remote,
             run_id=args.run_id,
+            runtime=args.runtime,
             quiet=args.quiet,
         )
     except ValueError as exc:
         print(f"error: {exc}", file=__import__("sys").stderr)
         return 2
+    except (RuntimeError, OSError, ImportError, __import__("subprocess").SubprocessError) as exc:
+        # container runtime, clone, image pull, existing output directory, failed stage
+        print(f"error: {exc}", file=__import__("sys").stderr)
+        return 1
     if use_remote:
         print(f"Remote request submitted: {result.remote_request_id}")
         print(f"Poll with: colliderml status {result.remote_request_id}")
-    else:
-        print(f"Output: {result.run_dir}")
+    elif args.quiet:
+        # without --quiet, simulate() has already printed the output locations
+        print(result.parquet_dir if result.particle_flow else result.run_dir)
     return 0
 
 
@@ -169,6 +179,7 @@ def _cmd_list_presets(args: argparse.Namespace) -> int:
             f"channel={p.channel:<{channel_width}} "
             f"events={p.events:<6} "
             f"pileup={p.pileup:<4} "
+            f"pflow={'yes' if p.particle_flow else 'no':<4}"
             f"{p.description}"
         )
         print(line.rstrip())
@@ -298,7 +309,30 @@ def build_parser() -> argparse.ArgumentParser:
     p_sim.add_argument(
         "--image",
         default=None,
-        help="Container image override. Defaults to the pinned ODD sw image.",
+        help="Sim image override. Defaults to the pinned ODD sw image.",
+    )
+    p_sim.add_argument(
+        "--reco-image",
+        default=None,
+        help="Reco image override (calorimeter digitization and Pandora). "
+        "Defaults to the pinned image; only used with particle flow.",
+    )
+    p_sim.add_argument(
+        "--particle-flow",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Continue after tracking with Pandora particle flow and write the final "
+        "parquet tables. Defaults to the preset's setting (off without a preset).",
+    )
+    p_sim.add_argument(
+        "--threads", type=int, default=None, help="Threads for Geant4 and ACTS, 2 or more (default: 2)."
+    )
+    p_sim.add_argument(
+        "--pandora-processes",
+        type=int,
+        default=None,
+        help="Concurrent Pandora processes (default: 1). One needs about 2 GB without "
+        "pileup, about 6 GB at pileup 200.",
     )
     exec_mode = p_sim.add_mutually_exclusive_group()
     exec_mode.add_argument(
@@ -311,6 +345,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_sim.add_argument(
         "--run-id", default="0", help="Run subdirectory name (default: '0')."
+    )
+    p_sim.add_argument(
+        "--runtime",
+        default=None,
+        choices=["docker", "podman-hpc", "podman"],
+        help="Container runtime (default: the first of docker, podman-hpc, podman found).",
     )
     p_sim.add_argument(
         "--quiet", action="store_true", help="Suppress per-stage progress messages."

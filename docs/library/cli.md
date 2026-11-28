@@ -8,7 +8,7 @@ colliderml --help
 colliderml <subcommand> --help
 ```
 
-## `download` — fetch dataset shards
+## `download`: fetch dataset shards
 
 Download a subset (heuristic shard selection) for a process / pileup / object set:
 
@@ -26,14 +26,14 @@ downloaded — the Polars loader then enforces exact event selection
 locally. Data goes into `$COLLIDERML_DATA_DIR` (default
 `~/.cache/colliderml`) or wherever you point `--out`.
 
-## `list-configs` — inspect the cache or the remote repo
+## `list-configs`: inspect the cache or the remote repo
 
 ```bash
 colliderml list-configs                       # locally cached configs
 colliderml list-configs --remote              # query HuggingFace for what exists
 ```
 
-## `simulate` — run the pipeline
+## `simulate`: run the pipeline
 
 New in v0.4.0. Runs the full Pythia / MadGraph / Geant4 / ACTS
 pipeline, either locally inside a Docker or Podman container or via
@@ -48,6 +48,9 @@ colliderml simulate \
   --channel higgs_portal --events 10 --pileup 10 \
   --local --output ./runs/hp10
 
+# Full chain with Pandora particle flow and the final parquet tables:
+colliderml simulate --preset ttbar-pflow-quick --output ./ttbar_pflow
+
 # Submit to the SaaS backend (needs an HF token):
 colliderml simulate --preset ttbar-benchmark --remote
 ```
@@ -56,33 +59,38 @@ Options:
 
 | Flag | Meaning |
 | :-- | :-- |
-| `--preset <name>` | Named preset; sets channel/events/pileup if not supplied. |
-| `--channel <name>` | Physics channel (`ttbar`, `higgs_portal`, `single_muon`, …). |
+| `--preset <name>` | Named preset; sets channel/events/pileup/particle flow if not supplied. |
+| `--channel <name>` | Physics channel (`ttbar` or `higgs_portal`). |
 | `--events <N>` | Number of events to generate. |
 | `--pileup <N>` | Pileup level (0 for no pileup, 200 for HL-LHC). |
 | `--seed <N>` | Random seed forwarded to every stage. Default: 42. |
 | `--output <dir>` | Host output directory. Defaults to `./colliderml_output/<channel>_pu<pileup>_<events>evt`. |
-| `--image <tag>` | Override the container image. Defaults to the pinned ODD sw image. |
+| `--image <tag>` | Override the sim image. Defaults to the pinned ODD sw image. |
+| `--reco-image <tag>` | Override the reco image (calorimeter digitisation and Pandora). Only used with particle flow. |
+| `--particle-flow` / `--no-particle-flow` | Continue after tracking with particle flow and write the final parquet tables. Defaults to the preset's setting. |
+| `--threads <N>` | Threads for Geant4 and ACTS, 2 or more. Default: 2. |
+| `--pandora-processes <N>` | Concurrent Pandora processes. Default: 1. One needs about 2 GB without pile-up, about 6 GB at pile-up 200. |
 | `--local` / `--remote` | Mutually exclusive; default is local if a runtime is available. |
-| `--run-id <name>` | Subdirectory under `runs/`. Default: `0`. |
+| `--run-id <name>` | Subdirectory under `runs/`. Default: `0`, which particle-flow runs must keep. |
+| `--runtime <name>` | `docker`, `podman-hpc` or `podman`. Default: the first one found, in that order. |
 | `--quiet` | Suppress per-stage progress messages. |
 
 See the [Local Simulation](../guide/simulation.md) and
 [Remote Simulation](../guide/remote-simulation.md) guides for the full
 story.
 
-## `list-presets` — print the bundled preset catalogue
+## `list-presets`: print the bundled preset catalogue
 
 ```bash
 colliderml list-presets
 ```
 
 Outputs one line per preset with its name, channel, event count,
-pileup, and description. See
+pileup, whether it runs particle flow, and description. See
 [`colliderml.simulate.load_presets`](./simulate.md#list_presets) for
 the API equivalent.
 
-## `balance` — show your credit balance
+## `balance`: show your credit balance
 
 New in v0.4.0. Queries the SaaS backend's `/v1/me` endpoint and prints
 your credit balance. Requires the `[remote]` extra and a HuggingFace
@@ -96,7 +104,7 @@ colliderml balance
 colliderml balance --json    # also print the raw /v1/me body
 ```
 
-## `status` — check a remote request
+## `status`: check a remote request
 
 New in v0.4.0. Fetches a remote simulation request's state from
 `/v1/requests/<request-id>`.

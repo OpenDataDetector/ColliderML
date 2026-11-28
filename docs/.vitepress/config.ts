@@ -14,8 +14,8 @@ const config = defineConfig({
   base,
 
   
-  // Ignore dead links for now (pages don't exist yet)
-  ignoreDeadLinks: true,
+  // Fail the build on links to pages that do not exist (anchors are not checked)
+  ignoreDeadLinks: false,
 
   themeConfig: {
     // logo: { src: '/logo.png', height: 32 },

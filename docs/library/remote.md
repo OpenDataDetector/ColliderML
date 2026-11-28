@@ -123,8 +123,7 @@ Returns the authenticated user's profile. Shape (defined by the backend):
 ## `balance(*, backend_url=None)` → `float` { #balance }
 
 Thin wrapper around `get_me()["credits"]`. Used by the CLI
-`colliderml balance` command and re-exported as `colliderml.balance`
-(after commit B4).
+`colliderml balance` command and re-exported as `colliderml.balance`.
 
 ```python
 import colliderml
@@ -163,7 +162,7 @@ show up there before they're promoted to dedicated attributes.
 
 | Name | Meaning | Default |
 | :-- | :-- | :-- |
-| `COLLIDERML_BACKEND` | Backend base URL (overridden by `backend_url=` keyword) | `https://api.colliderml.com` |
+| `COLLIDERML_BACKEND` | Backend base URL (overridden by `backend_url=` keyword) | `https://colliderml-backend.onrender.com` |
 | `HF_TOKEN` | HuggingFace API token | — |
 | `HUGGING_FACE_HUB_TOKEN` | Fallback HF token env var | — |
 
